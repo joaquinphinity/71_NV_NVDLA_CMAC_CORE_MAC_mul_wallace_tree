@@ -44,7 +44,7 @@ my $log = "";
 my $testfile = "";
 if (-d $testdir) {
   $testfile = $ARGV[1];
-  $log = "$testdir/$testfile";
+  $log = "$testdir/${testfile}.log";
   if (-e $log) {
   } else {
     print (sprintf "checktest : NOTRUN : %-40s : no log found : please kick off with make run TESTDIR=%0s \n",$testdir,$testdir) ;
@@ -61,6 +61,15 @@ if (-d $testdir) {
   }
 }
 
+if ($#ARGV >= 1) {
+ $log = "$testdir/${testfile}.log";
+} else {
+ $log = "$testdir/input.txn.log";
+}
+my $iface_errors_ok = 1;
+my $found_uvm_msgs  = 0;
+my $runstart = 0;
+my $runend = 0;
 my $expect_end_time_next = 0;
 my $errors = 0;
 my $start_found = 0;
@@ -82,13 +91,28 @@ if (-e $log) {
 
    open (FH,"<$log");
 
+   my $fatalerrors = 0;
       $errors = 0;
+   my $drivers_idled = 0;
+   my $shutdown_completed = 0;
    my $transaction_num = 0;
 
    while (<FH>) {
      my $line = $_;
-     if ($line =~ m/.*ERROR.*/) {
+     if ($line =~ m/^\s*UVM_ERROR.*@/) {
         $errors = $errors + 1;
+     }
+     if ($line =~ m/^\s*UVM_FATAL\s+:\s+(\d+)/) {
+        $fatalerrors = $fatalerrors + $1;
+        $errors = $errors + $fatalerrors;
+        $found_uvm_msgs = 1;
+     }
+     if ($line =~ m/Waiting for drivers to idle/) {
+        $drivers_idled = 1;
+     } elsif ($line =~ m/Shutting down/) {
+        $shutdown_completed = 1;
+     } elsif ($line =~ m/Starting transaction (\d+)/) {
+        $transaction_num = $1;
      } elsif ($line =~ m/Compiler .*\;\s+(\S+)\s+(\d+)\s+(\d+):(\d+)\s+(\d+)/) {
          $start_month = $1;
          $start_day = $2;
@@ -140,46 +164,57 @@ if (-e $log) {
 
    my $dumpdiff_passed = 1;
    my $dumpdiff_string = "";
-   my @dump_files = glob("$testdir/*chiplib_dump.raw2");
-   my $dump_files_size=@dump_files;
-   print "Warning: could not find any golden $testdir/*chiplib_dump.raw2\n" unless $dump_files_size;
-   if ($dump_files_size) {
-       foreach(@dump_files) {
-          chomp($_);
-          my $replay_file = $_;
-          $replay_file =~s/chiplib_dump/chiplib_replay/;
-          if(!(-e $replay_file)) { 
-              $dumpdiff_passed = 0;
-              $dumpdiff_string .= "Did not find dump file $replay_file, could not compare. ";
-          } else {
-              my @cmp = `cmp $_ $replay_file`;
-              if(scalar @cmp > 0) {
-                  # Cadence emulator prints the address at the beginning; try stripping off the first line and cmp again
-                  @cmp = `tail --lines=+2 $replay_file | cmp $_`;
-                  if(scalar @cmp > 0) {
-                      $dumpdiff_passed = 0;
-                      $dumpdiff_string .= "Found mismatches between $_ and $replay_file. ";
-                  }
-              }
-          }
-       }
-       my $num_dumps = scalar @dump_files;
-       if($dumpdiff_passed && $num_dumps > 0) {
-            $dumpdiff_string .= "($num_dumps of $num_dumps dump files matched)";
-       }
+   my @dump_files = glob("$testdir/*chiplib_dump.raw");
+   foreach(@dump_files) {
+        chomp($_);
+        my $replay_file = $_;
+        $replay_file =~s/chiplib_dump/chiplib_replay/;
+        if(!(-e $replay_file)) { 
+            $dumpdiff_passed = 0;
+            $dumpdiff_string .= "Did not find dump file $replay_file, could not compare. ";
+        } else {
+            my @cmp = `cmp $_ $replay_file`;
+            if(scalar @cmp > 0) {
+                $dumpdiff_passed = 0;
+                $dumpdiff_string .= "Found mismatches between $_ and $replay_file. ";
+            }
+        }
    }
+   my $num_dumps = scalar @dump_files;
+   if($dumpdiff_passed && $num_dumps > 0) {
+        $dumpdiff_string .= "($num_dumps of $num_dumps dump files matched)";
+   }
+   
 
     my $plural = "";
     my $pluralfatal = "";
-    if ($errors == 0) {
-        if($dumpdiff_passed == 0) {
-            print sprintf( "checktest : FAILED : %-40s : all transactions completed with no errors but dump_mem mismatched: $dumpdiff_string",$testdir) . "\n";
-        } else {
-            # NO errors found - declare a pass.
-            print sprintf( "checktest : PASSED : %-40s ${total_time_string} ${dumpdiff_string}",$testdir) . "\n" ;
-        }
+    if ($errors == 0 && $found_uvm_msgs && $dumpdiff_passed) {
+        # NO errors found - declare a pass.
+        print sprintf( "checktest : PASSED : %-40s ${total_time_string} ${dumpdiff_string}",$testdir) . "\n" ;
+    } elsif(!$found_uvm_msgs) {
+         # NO uvm messages found - declare probably RUNNING .
+         my $inputfile = "$testdir/input.txn";
+         #open(FHI,"<$inputfile");
+         #my $filesize = @{[<FHI>]}; ; #Out of memory!
+         my $filesize = `wc -l $inputfile | cut -d ' ' -f1`;
+         print sprintf( "checktest : RUNNING: %-40s : approximately %2.1f percent done. ",$testdir,100*($transaction_num/$filesize));
+         if($errors > 0) {
+            print sprintf( "(%d errors found)", $errors );
+         } else {
+            print "(no errors found)";
+         }
+         print "\n";
     } else {
-        print sprintf( "checktest : FAILED : %-40s : all transactions completed : with %0d error${plural}. $dumpdiff_string",$testdir,$errors) . "\n";
+       if (($fatalerrors == 0) && ($iface_errors_ok)) {
+         # errors found but non fatal
+         if ($errors > 1) {$plural = "s";} else {$plural = "";}
+         print sprintf( "checktest : FAILED : %-40s : all transactions completed : with %0d error${plural}. $dumpdiff_string",$testdir,$errors) . "\n";
+       } else {
+       # errors found
+         if ($errors > 1) {$plural = "s";} else {$plural = "";}
+         if ($fatalerrors > 1) {$pluralfatal = "s";} else {$pluralfatal = "";}
+       print sprintf( "checktest : FAILED : %-40s with %0d error${plural} : %0d fatal error${pluralfatal} : see $log for details. $dumpdiff_string",$testdir,$errors,$fatalerrors) . "\n" ;
+       }
     }
 
 } else {
@@ -187,8 +222,7 @@ if (-e $log) {
    print (sprintf "checktest : NOTRUN : %-40s : no log found : please kick off with make run TESTDIR=%0s \n",$testdir,$testdir) ;
 }
 
-# TODO: Need perf script
-#my @perf = `./perfcheck.pl $testdir`;
-#foreach(@perf){ print "checkperf : $_"; }
+my @perf = `./perfcheck.pl $testdir`;
+foreach(@perf){ print "checkperf : $_"; }
 
 exit;
