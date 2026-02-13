@@ -1617,7 +1617,7 @@ def test_NV_NVDLA_CMAC_CORE_MAC_mul_hidden_runner():
         proj_path / "sources/vmod/nvdla/cmac/NV_NVDLA_CMAC_CORE_wallace_4to2_FIXED.v",
         proj_path / "sources/vmod/nvdla/cmac/NV_NVDLA_CMAC_CORE_csa32.v",
         proj_path / "sources/vmod/nvdla/cmac/NV_NVDLA_CMAC_CORE_csa42.v",
-        proj_path / "sources/vmod/nvdla/cmac/NV_NVDLA_CMAC_CORE_MAC_booth.v",
+        
     ]
     
     runner = get_runner(sim)
