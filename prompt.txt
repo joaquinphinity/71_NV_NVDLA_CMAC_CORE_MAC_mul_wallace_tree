@@ -63,7 +63,9 @@ Create the modules you need to implement an efficient Wallace tree. You might wa
   - Wallace tree modules that reduce multiple inputs to two outputs
   - Any helper modules that make sense for your design
 
-Organize them however you think is cleanest. Create as many separate files as you need.
+Place your Wallace tree implementation files in the sources/vmod/nvdla/cmac/ directory (same location as the multiplier you're modifying). This follows NVDLA's organization principle where application-specific modules stay with their parent components, while vmod/vlibs/ is reserved for generic, parameterized library components.
+
+Create as many separate files as you need for your implementation.
 
 Your Wallace trees should match the interface of what they're replacing - same inputs, same outputs, just different internal implementation.
 
