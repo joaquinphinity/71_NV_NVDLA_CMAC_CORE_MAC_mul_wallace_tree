@@ -1,17 +1,14 @@
 OPTIMIZE THE CMAC MULTIPLIER WITH A STRUCTURAL WALLACE TREE
 
-
 The Problem
 
 The CMAC multiplier currently uses generic CSA tree modules that work through behavioral iteration loops. This makes synthesis tool-dependent and timing unpredictable. We want to replace these with an explicit Wallace tree using structural carry-save adder stages for better performance and more reliable synthesis.
-
 
 Your Task
 
 Replace the iterative CSA tree with a hand-crafted structural Wallace tree in the CMAC multiplier.
 
 You can create as many new RTL modules as you think you need to implement this properly. Don't try to fit everything into a single file - organize your Wallace tree implementation into separate modules however makes sense to you.
-
 
 What You Need to Know
 
@@ -35,7 +32,6 @@ To add N numbers with a Wallace tree:
 
 The advantage is that all bit positions work in parallel - no waiting for carries to ripple across.
 
-
 CARRY-SAVE ARITHMETIC
 
 In carry-save format, you keep sum and carry separate until the very end.
@@ -46,7 +42,6 @@ For your 3-to-2 compressor:
   - The carry gets added to the next higher bit position (it represents double the weight of the sum bit)
 
 The final sum and carry outputs from your Wallace tree will be combined later in the pipeline - your job is just to reduce many inputs down to those final two.
-
 
 What to Do
 
@@ -61,7 +56,6 @@ Analyze the code to understand:
   - What's the interface of each tree?
   - How does the data flow through the multiplier?
 
-
 STEP 2: IMPLEMENT YOUR WALLACE TREE
 
 Create the modules you need to implement an efficient Wallace tree. You might want:
@@ -73,13 +67,11 @@ Organize them however you think is cleanest. Create as many separate files as yo
 
 Your Wallace trees should match the interface of what they're replacing - same inputs, same outputs, just different internal implementation.
 
-
 STEP 3: REPLACE THE GENERIC TREES
 
 Swap out the old CSA tree instantiations with your new Wallace tree modules.
 
 Everything else - Booth encoding, mode logic, control signals, output formatting - stays exactly the same. You're only changing how partial products get summed up.
-
 
 Requirements
 
@@ -88,7 +80,6 @@ Requirements
   - No new ports: Module interface stays exactly as it is
   - No pipeline changes: Keep the same combinational structure
   - Synthesis-friendly: Use explicit structural instantiations, not behavioral loops
-
 
 What to Figure Out
 
@@ -102,8 +93,5 @@ Study the code to understand:
   - Which parts of the code to keep versus which to replace
 
 Take your time to analyze and understand the patterns. The implementation will follow naturally once you understand the existing structure.
-
-
-Good Luck
 
 Everything you need is in the codebase. The tests will verify your implementation is functionally equivalent to the original while providing the better synthesis characteristics we're looking for.
