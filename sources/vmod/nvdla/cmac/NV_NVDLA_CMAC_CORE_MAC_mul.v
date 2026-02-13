@@ -82,7 +82,6 @@ reg     [15:0] op_b_cur_dat;
 reg      [1:0] op_out_pvld;
 reg     [31:0] pp_fp16_0_sft;
 reg     [31:0] pp_fp16_1_sft;
-// RESTORED: pp_in signals needed for concatenated input format
 reg    [119:0] pp_in_l0n0;
 reg    [119:0] pp_in_l0n1;
 reg    [127:0] pp_in_l1n0;
@@ -468,8 +467,6 @@ always @(
   or sel_inv_2
   or sel_inv_3
   ) begin
-    // ORIGINAL NVDLA CODE (unchanged from NVIDIA)
-    // Zero-extension of Booth outputs
     ppre_0 = {7'b0, sel_data_0};
     ppre_1 = {5'b0, sel_data_1, 1'b0, sel_inv_0};
     ppre_2 = {3'b0, sel_data_2, 1'b0, sel_inv_1, 2'b0};
@@ -487,7 +484,6 @@ always @(
   or sel_inv_6
   or sel_inv_7
   ) begin
-    // ORIGINAL NVDLA CODE (unchanged from NVIDIA)
     ppre_5 = {7'b0, sel_data_4};
     ppre_6 = {5'b0, sel_data_5, 1'b0, sel_inv_4};
     ppre_7 = {3'b0, sel_data_6, 1'b0, sel_inv_5, 2'b0};
@@ -496,7 +492,7 @@ always @(
 end
 
 //==========================================================
-// CSA tree level 1 (Level 0 in Wallace tree terminology)
+// CSA tree level 1
 //==========================================================
 
 always @(
@@ -505,8 +501,8 @@ always @(
   or ppre_2
   or ppre_1
   or ppre_0
-) begin
-  pp_in_l0n0 = {ppre_4, ppre_3, ppre_2, ppre_1, ppre_0};
+  ) begin
+    pp_in_l0n0 = {ppre_4, ppre_3, ppre_2, ppre_1, ppre_0};
 end
 
 always @(
@@ -515,53 +511,44 @@ always @(
   or ppre_7
   or ppre_6
   or ppre_5
-) begin
-  pp_in_l0n1 = {ppre_9, ppre_8, ppre_7, ppre_6, ppre_5};
+  ) begin
+    pp_in_l0n1 = {ppre_9, ppre_8, ppre_7, ppre_6, ppre_5};
 end
 
-//==========================================================
-// MODIFIED: Wallace Tree 5:2 Reduction replacing NV_DW02_tree
-// Now uses concatenated input format (matches DW02_tree interface)
-//==========================================================
-NV_NVDLA_CMAC_CORE_wallace_5to2_FIXED #(5, 24) u_wallace_l0n0 (
-   .INPUT    (pp_in_l0n0[119:0])    //|< r
-  ,.OUT0     (pp_out_l0n0_0[23:0])  //|> w
-  ,.OUT1     (pp_out_l0n0_1[23:0])  //|> w
-);
+NV_DW02_tree #(5, 24) u_tree_l0n0 (
+   .INPUT    (pp_in_l0n0[119:0])   //|< r
+  ,.OUT0     (pp_out_l0n0_0[23:0]) //|> w
+  ,.OUT1     (pp_out_l0n0_1[23:0]) //|> w
+  );
 
-NV_NVDLA_CMAC_CORE_wallace_5to2_FIXED #(5, 24) u_wallace_l0n1 (
-   .INPUT    (pp_in_l0n1[119:0])    //|< r
-  ,.OUT0     (pp_out_l0n1_0[23:0])  //|> w
-  ,.OUT1     (pp_out_l0n1_1[23:0])  //|> w
-);
+NV_DW02_tree #(5, 24) u_tree_l0n1 (
+   .INPUT    (pp_in_l0n1[119:0])   //|< r
+  ,.OUT0     (pp_out_l0n1_0[23:0]) //|> w
+  ,.OUT1     (pp_out_l0n1_1[23:0]) //|> w
+  );
 
 //==========================================================
-// CSA tree level 2 (Level 1 in Wallace tree terminology)
+// CSA tree level 2
 //==========================================================
-
 always @(
   cfg_is_int8_d1
   or pp_out_l0n1_1
   or pp_out_l0n1_0
   or pp_out_l0n0_1
   or pp_out_l0n0_0
-) begin
-  pp_in_l1n0 = cfg_is_int8_d1 ? 128'b0 :
-               {{pp_out_l0n1_1, 8'b0},
-                {pp_out_l0n1_0, 8'b0},
-                {8'b0, pp_out_l0n0_1},
-                {8'b0, pp_out_l0n0_0}};
+  ) begin
+    pp_in_l1n0 = cfg_is_int8_d1 ? 128'b0 :
+                 {{pp_out_l0n1_1, 8'b0},
+                  {pp_out_l0n1_0, 8'b0},
+                  {8'b0, pp_out_l0n0_1},
+                  {8'b0, pp_out_l0n0_0}};
 end
 
-//==========================================================
-// MODIFIED: Wallace Tree 4:2 Reduction replacing NV_DW02_tree
-// Now uses concatenated input format (matches DW02_tree interface)
-//==========================================================
-NV_NVDLA_CMAC_CORE_wallace_4to2_FIXED #(4, 32) u_wallace_l1n0 (
-   .INPUT    (pp_in_l1n0[127:0])    //|< r
-  ,.OUT0     (pp_out_l1n0_0[31:0])  //|> w
-  ,.OUT1     (pp_out_l1n0_1[31:0])  //|> w
-);
+NV_DW02_tree #(4, 32) u_tree_l1n0 (
+   .INPUT    (pp_in_l1n0[127:0])   //|< r
+  ,.OUT0     (pp_out_l1n0_0[31:0]) //|> w
+  ,.OUT1     (pp_out_l1n0_1[31:0]) //|> w
+  );
 
 //==========================================================
 // Shift logic for float-point
@@ -662,8 +649,25 @@ endmodule // NV_NVDLA_CMAC_CORE_MAC_mul
 // Sub unit for NV_NVDLA_CMAC_CORE_MAC_mul
 // Booth's recoder and Booth's selector with inversed sign flag
 //
-// REMOVED: Stub module definition - now implemented in separate file
-// NV_NVDLA_CMAC_CORE_MAC_booth.v contains the complete implementation
 //==========================================================
+
+module NV_NVDLA_CMAC_CORE_MAC_booth (
+   code
+  ,is_8bit
+  ,sign
+  ,src_data
+  ,out_data
+  ,out_inv
+  );
+
+input   [2:0] code;
+input         is_8bit;
+input         sign;
+input  [15:0] src_data;
+output [16:0] out_data;
+output        out_inv;
+//do to impliment
+
+endmodule // NV_NVDLA_CMAC_CORE_MAC_booth
 
 
