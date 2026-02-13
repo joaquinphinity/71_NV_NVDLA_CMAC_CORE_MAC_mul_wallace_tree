@@ -1,4 +1,3 @@
-
 // ================================================================
 // NVDLA Open Source Project
 // 
@@ -8,7 +7,7 @@
 // ================================================================
 
 // File Name: NV_NVDLA_CMAC_CORE_MAC_mul.v
-`timescale 1ns/1ps
+
 module NV_NVDLA_CMAC_CORE_MAC_mul (
    nvdla_core_clk  //|< i
   ,nvdla_core_rstn //|< i
@@ -515,17 +514,36 @@ always @(
     pp_in_l0n1 = {ppre_9, ppre_8, ppre_7, ppre_6, ppre_5};
 end
 
+
+`ifdef DESIGNWARE_NOEXIST 
 NV_DW02_tree #(5, 24) u_tree_l0n0 (
    .INPUT    (pp_in_l0n0[119:0])   //|< r
   ,.OUT0     (pp_out_l0n0_0[23:0]) //|> w
   ,.OUT1     (pp_out_l0n0_1[23:0]) //|> w
   );
+`else 
+DW02_tree #(5, 24) u_tree_l0n0 (
+   .INPUT    (pp_in_l0n0[119:0])   //|< r
+  ,.OUT0     (pp_out_l0n0_0[23:0]) //|> w
+  ,.OUT1     (pp_out_l0n0_1[23:0]) //|> w
+  );
+`endif 
 
+
+`ifdef DESIGNWARE_NOEXIST 
 NV_DW02_tree #(5, 24) u_tree_l0n1 (
    .INPUT    (pp_in_l0n1[119:0])   //|< r
   ,.OUT0     (pp_out_l0n1_0[23:0]) //|> w
   ,.OUT1     (pp_out_l0n1_1[23:0]) //|> w
   );
+`else 
+DW02_tree #(5, 24) u_tree_l0n1 (
+   .INPUT    (pp_in_l0n1[119:0])   //|< r
+  ,.OUT0     (pp_out_l0n1_0[23:0]) //|> w
+  ,.OUT1     (pp_out_l0n1_1[23:0]) //|> w
+  );
+`endif 
+
 
 //==========================================================
 // CSA tree level 2
@@ -544,11 +562,19 @@ always @(
                   {8'b0, pp_out_l0n0_0}};
 end
 
+`ifdef DESIGNWARE_NOEXIST 
 NV_DW02_tree #(4, 32) u_tree_l1n0 (
    .INPUT    (pp_in_l1n0[127:0])   //|< r
   ,.OUT0     (pp_out_l1n0_0[31:0]) //|> w
   ,.OUT1     (pp_out_l1n0_1[31:0]) //|> w
   );
+`else 
+DW02_tree #(4, 32) u_tree_l1n0 (
+   .INPUT    (pp_in_l1n0[127:0])   //|< r
+  ,.OUT0     (pp_out_l1n0_0[31:0]) //|> w
+  ,.OUT1     (pp_out_l1n0_1[31:0]) //|> w
+  );
+`endif 
 
 //==========================================================
 // Shift logic for float-point
@@ -666,8 +692,108 @@ input         sign;
 input  [15:0] src_data;
 output [16:0] out_data;
 output        out_inv;
-//do to impliment
+reg     [2:0] in_code;
+reg    [16:0] out_data;
+reg           out_inv;
+
+
+always @(
+  sign
+  or code
+  ) begin
+    in_code = {3{sign}} ^ code;
+end
+
+always @(
+  is_8bit
+  or in_code
+  or src_data
+  ) begin
+    case({is_8bit, in_code})
+        ///////// for 16bit /////////
+        // +/- 0*src_data
+        4'b0000,
+        4'b0111:
+        begin
+            out_data = 17'h10000;
+            out_inv = 1'b0;
+        end
+
+        // + 1*src_data
+        4'b0001,
+        4'b0010:
+        begin
+            out_data = {~src_data[15], src_data};
+            out_inv = 1'b0;
+        end
+
+        // - 1*src_data
+        4'b0101,
+        4'b0110:
+        begin
+            out_data = {src_data[15], ~src_data};
+            out_inv = 1'b1;
+        end
+
+        // + 2*src_data
+        4'b0011:
+        begin
+            out_data = {~src_data[15], src_data[14:0], 1'b0};
+            out_inv = 1'b0;
+        end
+
+        // - 2*src_data
+        4'b0100:
+        begin
+            out_data = {src_data[15], ~src_data[14:0], 1'b1};
+            out_inv = 1'b1;
+        end
+
+        ///////// for 8bit /////////
+        // +/- 0*src_data
+        4'b1000,
+        4'b1111:
+        begin
+            out_data = 17'h100;
+            out_inv = 1'b0;
+        end
+
+        // + 1*src_data
+        4'b1001,
+        4'b1010:
+        begin
+            out_data = {8'b0, ~src_data[7], src_data[7:0]};
+            out_inv = 1'b0;
+        end
+
+        // - 1*src_data
+        4'b1101,
+        4'b1110:
+        begin
+            out_data = {8'b0, src_data[7], ~src_data[7:0]};
+            out_inv = 1'b1;
+        end
+
+        // + 2*src_data
+        4'b1011:
+        begin
+            out_data = {8'b0, ~src_data[7], src_data[6:0], 1'b0};
+            out_inv = 1'b0;
+        end
+
+        // - 2*src_data
+        4'b1100:
+        begin
+            out_data = {8'b0, src_data[7], ~src_data[6:0], 1'b1};
+            out_inv = 1'b1;
+        end
+        default:
+        begin
+            out_data = 17'h10000;
+            out_inv = 1'b0;
+        end
+    endcase
+end
 
 endmodule // NV_NVDLA_CMAC_CORE_MAC_booth
-
 
