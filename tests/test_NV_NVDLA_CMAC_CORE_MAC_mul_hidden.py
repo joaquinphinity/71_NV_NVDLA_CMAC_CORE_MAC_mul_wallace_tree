@@ -299,7 +299,6 @@ def set_operands_valid(dut, op_a, op_b):
 # Test #1: Reset Behavior
 # =============================================================================
 
-# Test 1
 @cocotb.test(timeout_time=1000, timeout_unit="ms")
 async def test_1_reset_behavior(dut):
     """Test 1: Verify reset clears all outputs."""
@@ -336,8 +335,10 @@ async def test_1_reset_behavior(dut):
     dut._log.info("Test 1: Reset behavior PASSED")
 
 
+# =============================================================================
+# Test #2: INT8 Dual 8x8 Multiplication
+# =============================================================================
 
-# Test 2
 @cocotb.test(timeout_time=5000, timeout_unit="ms")
 async def test_2_int8_comprehensive(dut):
     """Test 2: INT8 dual 8x8 - Directed cases + Random stress (100 vectors)."""
@@ -411,8 +412,10 @@ async def test_2_int8_comprehensive(dut):
     dut._log.info("Test 2: INT8 comprehensive (directed + 100 random) PASSED")
 
 
+# =============================================================================
+# Test #3: INT16 Full 16x16 Multiplication
+# =============================================================================
 
-# Test 3
 @cocotb.test(timeout_time=5000, timeout_unit="ms")
 async def test_3_int16_comprehensive(dut):
     """Test 3: INT16 full 16x16 - Directed cases + Random stress (100 vectors)."""
@@ -481,8 +484,10 @@ async def test_3_int16_comprehensive(dut):
     dut._log.info("Test 3: INT16 comprehensive (directed + 100 random) PASSED")
 
 
+# =============================================================================
+# Test #4: FP16 Mantissa Multiplication
+# =============================================================================
 
-# Test 4
 @cocotb.test(timeout_time=1000, timeout_unit="ms")
 async def test_4_fp16_mantissa_multiply(dut):
     """Test 4: FP16 mode - mantissa multiplication with sign handling."""
@@ -532,8 +537,10 @@ async def test_4_fp16_mantissa_multiply(dut):
     dut._log.info("Test 4: FP16 mantissa multiplication PASSED")
 
 
+# =============================================================================
+# Test #5: Booth Encoding Table Verification
+# =============================================================================
 
-# Test 5
 @cocotb.test(timeout_time=1000, timeout_unit="ms")
 async def test_5_booth_encoding_table(dut):
     """Test 5: Verify all 8 Booth Radix-4 encoding cases."""
@@ -594,8 +601,10 @@ async def test_5_booth_encoding_table(dut):
     dut._log.info("Test 5: Booth encoding table PASSED")
 
 
+# =============================================================================
+# Test #6: Wallace Tree Arithmetic Correctness
+# =============================================================================
 
-# Test 6
 @cocotb.test(timeout_time=1000, timeout_unit="ms")
 async def test_6_wallace_tree_arithmetic(dut):
     """Test 6: Verify Wallace tree produces correct sum+carry reduction."""
@@ -629,8 +638,10 @@ async def test_6_wallace_tree_arithmetic(dut):
     dut._log.info("Test 6: Wallace tree arithmetic PASSED")
 
 
+# =============================================================================
+# Test #7: NZ (Non-Zero) Gating Behavior
+# =============================================================================
 
-# Test 7
 @cocotb.test(timeout_time=1000, timeout_unit="ms")
 async def test_7_nz_gating_behavior(dut):
     """Test 7: Verify lane validity gating with op_a_nz and op_b_nz flags."""
@@ -669,8 +680,10 @@ async def test_7_nz_gating_behavior(dut):
     dut._log.info("Test 7: NZ gating behavior PASSED")
 
 
+# =============================================================================
+# Test #8: Edge Cases (Zero, MAX, MIN)
+# =============================================================================
 
-# Test 8
 @cocotb.test(timeout_time=1000, timeout_unit="ms")
 async def test_8_edge_cases(dut):
     """Test 8: Edge cases - zero, MAX, MIN values."""
@@ -715,8 +728,100 @@ async def test_8_edge_cases(dut):
     dut._log.info("Test 8: Edge cases PASSED")
 
 
+# =============================================================================
+# Test #9: Random INT8 Stress Test
+# =============================================================================
 
-# Test 9
+@cocotb.test(timeout_time=5000, timeout_unit="ms")
+async def test_9_random_int8_stress(dut):
+    """Test 9: Random INT8 dual 8x8 multiplication - 200 vectors."""
+    clock = Clock(dut.nvdla_core_clk, 10, unit="ns")
+    cocotb.start_soon(clock.start())
+    
+    await reset_dut(dut)
+    await config_int8(dut)
+    
+    random.seed(42)  # Reproducible
+    
+    errors = 0
+    for i in range(200):
+        # Generate random signed 8-bit values
+        a_lo = random.randint(-128, 127)
+        a_hi = random.randint(-128, 127)
+        b_lo = random.randint(-128, 127)
+        b_hi = random.randint(-128, 127)
+        
+        # Convert to unsigned for driving DUT
+        op_a = (s8_to_u8(a_hi) << 8) | s8_to_u8(a_lo)
+        op_b = (s8_to_u8(b_hi) << 8) | s8_to_u8(b_lo)
+        
+        set_operands_valid(dut, op_a, op_b)
+        await Timer(3, unit="ns")
+        
+        pl_c = effective_product_low_candidates(dut)
+        ph_c = effective_product_high_candidates(dut)
+        
+        expected_lo = golden_int8_low(s8_to_u8(a_lo), s8_to_u8(b_lo))
+        expected_hi = golden_int8_high(s8_to_u8(a_hi), s8_to_u8(b_hi))
+        
+        try:
+            assert_product(dut, expected_lo, expected_hi, pl_c, ph_c, 
+                          f"INT8 random #{i}: {a_lo}*{b_lo}, {a_hi}*{b_hi}")
+        except AssertionError as e:
+            dut._log.error(f"INT8 random test {i} failed: {e}")
+            errors += 1
+            if errors > 5:  # Stop after 5 errors
+                raise
+    
+    assert errors == 0, f"INT8 random stress had {errors} errors"
+    dut._log.info("Test 9: Random INT8 stress (200 vectors) PASSED")
+
+
+# =============================================================================
+# Test #10: Random INT16 Stress Test
+# =============================================================================
+
+@cocotb.test(timeout_time=5000, timeout_unit="ms")
+async def test_10_random_int16_stress(dut):
+    """Test 10: Random INT16 full 16x16 multiplication - 200 vectors."""
+    clock = Clock(dut.nvdla_core_clk, 10, unit="ns")
+    cocotb.start_soon(clock.start())
+    
+    await reset_dut(dut)
+    await config_int16(dut)
+    
+    random.seed(99)  # Different seed from INT8
+    
+    errors = 0
+    for i in range(200):
+        op_a = random.randint(0, 0xFFFF)
+        op_b = random.randint(0, 0xFFFF)
+        
+        set_operands_valid(dut, op_a, op_b)
+        await Timer(3, unit="ns")
+        
+        pl_c = effective_product_low_candidates(dut)
+        ph_c = effective_product_high_candidates(dut)
+        
+        expected_lo = golden_int16_low16(op_a, op_b)
+        expected_hi = golden_int16_high16(op_a, op_b)
+        
+        try:
+            assert_product(dut, expected_lo, expected_hi, pl_c, ph_c, f"INT16 random #{i}")
+        except AssertionError as e:
+            dut._log.error(f"INT16 random #{i}: {op_a:04x}*{op_b:04x} failed: {e}")
+            errors += 1
+            if errors > 5:
+                break
+    
+    assert errors == 0, f"INT16 random stress had {errors} errors"
+    dut._log.info("Test 10: Random INT16 stress (200 vectors) PASSED")
+
+
+# =============================================================================
+# Test #9: INT8 Lane Independence (was Test 11)
+# =============================================================================
+
 @cocotb.test(timeout_time=1000, timeout_unit="ms")
 async def test_9_int8_lane_independence(dut):
     """Test 9: Verify INT8 upper and lower lanes don't contaminate each other."""
@@ -755,8 +860,10 @@ async def test_9_int8_lane_independence(dut):
     dut._log.info("Test 9: INT8 lane independence PASSED")
 
 
+# =============================================================================
+# Test #10: Config Pipeline and Mode Switching (was Test 12)
+# =============================================================================
 
-# Test 10
 @cocotb.test(timeout_time=1000, timeout_unit="ms")
 async def test_10_mode_switching(dut):
     """Test 10: Verify correct operation across mode transitions."""
@@ -804,121 +911,66 @@ async def test_10_mode_switching(dut):
     dut._log.info("Test 10: Mode switching PASSED")
 
 
+# =============================================================================
+# Pytest Runner (REQUIRED for HUD)
+# =============================================================================
 
-# Test 12
-async def test_12_full_width_bit_patterns(dut):
-    """
-    Test 12: Wallace tree with maximum bit-width values and special patterns.
+def test_NV_NVDLA_CMAC_CORE_MAC_mul_wallace_runner():
+    """Pytest entry point for HUD evaluation - TEST WITH MY WALLACE TREE."""
+    sim = os.getenv("SIM", "icarus")
+    proj_path = Path(__file__).resolve().parent.parent
     
-    Tests edge cases that stress CSA carry chains and majority functions.
-    """
-    clock = Clock(dut.nvdla_core_clk, 10, unit="ns")
-    cocotb.start_soon(clock.start())
-    
-    await reset_and_config_int16(dut)
-    
-    test_patterns = [
-        (0xFFFF, 0xFFFF, "All 1s"),
-        (0xAAAA, 0x5555, "Alternating bits"),
-        (0x0001, 0xFFFF, "Minimum × Maximum"),
-        (0x7FFF, 0x7FFF, "Max positive"),
-        (0x8000, 0x8000, "Min negative"),
-        (0xFF00, 0x00FF, "Byte boundaries"),
-        (0xF0F0, 0x0F0F, "Nibble alternating"),
+    # Source files needed for compilation
+    sources = [
+        # Timescale
+        proj_path / "tests/timescale.v",
+        
+        # Main target module (with Wallace tree)
+        proj_path / "sources/vmod/nvdla/cmac/NV_NVDLA_CMAC_CORE_MAC_mul.v",
+        
+        # Wallace tree modules (NEW - golden solution, DW02_tree-compatible interface)
+        proj_path / "sources/vmod/nvdla/cmac/NV_NVDLA_CMAC_CORE_wallace_5to2_FIXED.v",
+        proj_path / "sources/vmod/nvdla/cmac/NV_NVDLA_CMAC_CORE_wallace_4to2_FIXED.v",
+        
+        # CSA building blocks (NEW - golden solution)
+        proj_path / "sources/vmod/nvdla/cmac/NV_NVDLA_CMAC_CORE_csa32.v",
+        proj_path / "sources/vmod/nvdla/cmac/NV_NVDLA_CMAC_CORE_csa42.v",
+        
+        # Booth selector (NVIDIA's complete implementation)
+        proj_path / "sources/vmod/nvdla/cmac/NV_NVDLA_CMAC_CORE_MAC_booth.v",
     ]
     
-    for op_a, op_b, desc in test_patterns:
-        dut.op_a_dat.value = op_a
-        dut.op_b_dat.value = op_b
-        dut.op_a_pvld.value = 1
-        dut.op_b_pvld.value = 1
-        dut.op_a_nz.value = 3
-        dut.op_b_nz.value = 3
-        
-        await Timer(3, unit="ns")
-        
-        res_a = int(dut.res_a.value) & 0xFFFFFFFF
-        res_b = int(dut.res_b.value) & 0xFFFFFFFF
-        
-        # Verify no X/Z (proper computation)
-        # Exact arithmetic validated by golden models in other tests
-        
-        dut._log.info(f"  {desc}: res_a={res_a:08x}, res_b={res_b:08x}")
-    
-    dut._log.info("Test 12: Full-width bit patterns PASSED")
+    runner = get_runner(sim)
+    runner.build(
+        sources=sources,
+        hdl_toplevel="NV_NVDLA_CMAC_CORE_MAC_mul",
+        always=True,
+    )
+    runner.test(
+        hdl_toplevel="NV_NVDLA_CMAC_CORE_MAC_mul",
+        test_module="test_NV_NVDLA_CMAC_CORE_MAC_mul_wallace_hidden",
+    )
 
 
-#==============================================================================
-# Test 16: CSA Carry Propagation Stress
-#==============================================================================
-
-@cocotb.test(timeout_time=1000, timeout_unit="ms")
-
-# Test 13
-async def test_13_performance_documentation(dut):
-    """
-    Test 13: Document Wallace tree performance characteristics.
+def test_NV_NVDLA_CMAC_CORE_MAC_mul_NVIDIA_BASELINE_runner():
+    """Test with NVIDIA's ORIGINAL NV_DW02_tree for comparison."""
+    sim = os.getenv("SIM", "icarus")
+    proj_path = Path(__file__).resolve().parent.parent
     
-    This test doesn't verify timing (requires synthesis), but documents
-    the structural advantages of Wallace tree vs. NV_DW02_tree.
-    """
-    clock = Clock(dut.nvdla_core_clk, 10, unit="ns")
-    cocotb.start_soon(clock.start())
+    sources = [
+        proj_path / "tests/timescale.v",
+        proj_path / "sources/vmod/nvdla/cmac/MAC_mul_ORIGINAL.v",
+        proj_path / "sources/vmod/nvdla/cmac/NV_DW02_tree.v",
+    ]
     
-    await reset_and_config_int16(dut)
-    
-    dut._log.info("=== Wallace Tree Performance Characteristics ===")
-    dut._log.info("")
-    dut._log.info("Topology:")
-    dut._log.info("  Level 0 (5→2): 3-level CSA32 cascade")
-    dut._log.info("    - CSA32: pp[0:2] → sum0, carry0")
-    dut._log.info("    - CSA32: sum0, carry0, pp[3] → sum1, carry1")
-    dut._log.info("    - CSA32: sum1, carry1, pp[4] → OUT0, OUT1")
-    dut._log.info("  Level 1 (4→2): 2-level CSA32 cascade")
-    dut._log.info("    - CSA32: in[0:2] → sum0, carry0")
-    dut._log.info("    - CSA32: sum0, carry0, in[3] → OUT0, OUT1")
-    dut._log.info("")
-    dut._log.info("Critical Path:")
-    dut._log.info("  Wallace Tree: 3 FA delays (Level 0) + 2 FA delays (Level 1) = 5 FA delays")
-    dut._log.info("  NV_DW02_tree: Variable (iterative), typically 5-6 FA delays")
-    dut._log.info("  Improvement: 10-15% faster worst-case path")
-    dut._log.info("")
-    dut._log.info("Synthesis Benefits:")
-    dut._log.info("  ✓ Structural RTL (explicit CSA instances)")
-    dut._log.info("  ✓ Fixed topology (predictable timing)")
-    dut._log.info("  ✓ Tool-friendly (no behavioral loops to unroll)")
-    dut._log.info("  ✓ Optimized for specific input counts (5, 4)")
-    dut._log.info("")
-    dut._log.info("==============================================")
-    
-    # Run a simple test to verify it works
-    dut.op_a_dat.value = 1000
-    dut.op_b_dat.value = 2000
-    dut.op_a_pvld.value = 1
-    dut.op_b_pvld.value = 1
-    dut.op_a_nz.value = 3
-    dut.op_b_nz.value = 3
-    
-    await Timer(3, unit="ns")
-    
-    res_a = int(dut.res_a.value) & 0xFFFFFFFF
-    res_b = int(dut.res_b.value) & 0xFFFFFFFF
-    
-    prod_lo = ((res_a & 0xFFFF) + (res_b & 0xFFFF)) & 0xFFFF
-    prod_hi = (((res_a >> 16) & 0xFFFF) + ((res_b >> 16) & 0xFFFF)) & 0xFFFF
-    
-    expected_full = 1000 * 2000  # 2,000,000
-    expected_lo = expected_full & 0xFFFF
-    expected_hi = (expected_full >> 16) & 0xFFFF
-    
-    dut._log.info(f"Verification: 1000 × 2000 = {(prod_hi << 16) | prod_lo}")
-    
-    dut._log.info("Test 13: Performance documentation PASSED")
-
-
-# =============================================================================
-# Pytest Runners
-# =============================================================================
-
-
-# Test 14
+    runner = get_runner(sim)
+    runner.build(
+        sources=sources,
+        hdl_toplevel="NV_NVDLA_CMAC_CORE_MAC_mul",
+        always=True,
+        build_args=["-DDESIGNWARE_NOEXIST"],
+    )
+    runner.test(
+        hdl_toplevel="NV_NVDLA_CMAC_CORE_MAC_mul",
+        test_module="test_NV_NVDLA_CMAC_CORE_MAC_mul_wallace_hidden",
+    )
