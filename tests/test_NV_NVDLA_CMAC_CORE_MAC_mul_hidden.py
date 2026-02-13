@@ -1610,16 +1610,31 @@ def test_NV_NVDLA_CMAC_CORE_MAC_mul_hidden_runner():
     sim = os.getenv("SIM", "icarus")
     proj_path = Path(__file__).resolve().parent.parent
     
+    # Base sources that always exist
     sources = [
         proj_path / "tests/timescale.v",
         proj_path / "sources/vmod/nvdla/cmac/NV_NVDLA_CMAC_CORE_MAC_mul.v",
-        proj_path / "sources/vmod/nvdla/cmac/NV_NVDLA_CMAC_CORE_wallace_5to2_FIXED.v",
-        proj_path / "sources/vmod/nvdla/cmac/NV_NVDLA_CMAC_CORE_wallace_4to2_FIXED.v",
-        proj_path / "sources/vmod/nvdla/cmac/NV_NVDLA_CMAC_CORE_csa32.v",
-        proj_path / "sources/vmod/nvdla/cmac/NV_NVDLA_CMAC_CORE_csa42.v",
-        
+        proj_path / "sources/vmod/vlibs/NV_DW02_tree.v",  # Needed for baseline (uses DW02_tree)
     ]
     
+    # Conditionally add Wallace tree files if they exist (golden branch has them, baseline doesn't)
+    wallace_files = [
+        "sources/vmod/nvdla/cmac/NV_NVDLA_CMAC_CORE_wallace_5to2_FIXED.v",
+        "sources/vmod/nvdla/cmac/NV_NVDLA_CMAC_CORE_wallace_4to2_FIXED.v",
+        "sources/vmod/nvdla/cmac/NV_NVDLA_CMAC_CORE_csa32.v",
+        "sources/vmod/nvdla/cmac/NV_NVDLA_CMAC_CORE_csa42.v",
+    ]
+    
+    for wallace_file in wallace_files:
+        wallace_path = proj_path / wallace_file
+        if wallace_path.exists():
+            sources.append(wallace_path)
+    
     runner = get_runner(sim)
-    runner.build(sources=sources, hdl_toplevel="NV_NVDLA_CMAC_CORE_MAC_mul", always=True)
+    runner.build(
+        sources=sources, 
+        hdl_toplevel="NV_NVDLA_CMAC_CORE_MAC_mul", 
+        always=True,
+        defines={"DESIGNWARE_NOEXIST": 1}  # Use NV_DW02_tree instead of commercial DW02_tree
+    )
     runner.test(hdl_toplevel="NV_NVDLA_CMAC_CORE_MAC_mul", test_module="test_NV_NVDLA_CMAC_CORE_MAC_mul_hidden")
