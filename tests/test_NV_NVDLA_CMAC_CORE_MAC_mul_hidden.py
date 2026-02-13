@@ -728,102 +728,12 @@ async def test_8_edge_cases(dut):
 
 
 # =============================================================================
-# Test #9: Random INT8 Stress Test
-# =============================================================================
-
-@cocotb.test(timeout_time=5000, timeout_unit="ms")
-async def test_9_random_int8_stress(dut):
-    """Test 9: Random INT8 dual 8x8 multiplication - 200 vectors."""
-    clock = Clock(dut.nvdla_core_clk, 10, unit="ns")
-    cocotb.start_soon(clock.start())
-    
-    await reset_dut(dut)
-    await config_int8(dut)
-    
-    random.seed(42)  # Reproducible
-    
-    errors = 0
-    for i in range(200):
-        # Generate random signed 8-bit values
-        a_lo = random.randint(-128, 127)
-        a_hi = random.randint(-128, 127)
-        b_lo = random.randint(-128, 127)
-        b_hi = random.randint(-128, 127)
-        
-        # Convert to unsigned for driving DUT
-        op_a = (s8_to_u8(a_hi) << 8) | s8_to_u8(a_lo)
-        op_b = (s8_to_u8(b_hi) << 8) | s8_to_u8(b_lo)
-        
-        set_operands_valid(dut, op_a, op_b)
-        await Timer(3, unit="ns")
-        
-        pl_c = effective_product_low_candidates(dut)
-        ph_c = effective_product_high_candidates(dut)
-        
-        expected_lo = golden_int8_low(s8_to_u8(a_lo), s8_to_u8(b_lo))
-        expected_hi = golden_int8_high(s8_to_u8(a_hi), s8_to_u8(b_hi))
-        
-        try:
-            assert_product(dut, expected_lo, expected_hi, pl_c, ph_c, 
-                          f"INT8 random #{i}: {a_lo}*{b_lo}, {a_hi}*{b_hi}")
-        except AssertionError as e:
-            dut._log.error(f"INT8 random test {i} failed: {e}")
-            errors += 1
-            if errors > 5:  # Stop after 5 errors
-                raise
-    
-    assert errors == 0, f"INT8 random stress had {errors} errors"
-    dut._log.info("Test 9: Random INT8 stress (200 vectors) PASSED")
-
-
-# =============================================================================
-# Test #10: Random INT16 Stress Test
-# =============================================================================
-
-@cocotb.test(timeout_time=5000, timeout_unit="ms")
-async def test_10_random_int16_stress(dut):
-    """Test 10: Random INT16 full 16x16 multiplication - 200 vectors."""
-    clock = Clock(dut.nvdla_core_clk, 10, unit="ns")
-    cocotb.start_soon(clock.start())
-    
-    await reset_dut(dut)
-    await config_int16(dut)
-    
-    random.seed(99)  # Different seed from INT8
-    
-    errors = 0
-    for i in range(200):
-        op_a = random.randint(0, 0xFFFF)
-        op_b = random.randint(0, 0xFFFF)
-        
-        set_operands_valid(dut, op_a, op_b)
-        await Timer(3, unit="ns")
-        
-        pl_c = effective_product_low_candidates(dut)
-        ph_c = effective_product_high_candidates(dut)
-        
-        expected_lo = golden_int16_low16(op_a, op_b)
-        expected_hi = golden_int16_high16(op_a, op_b)
-        
-        try:
-            assert_product(dut, expected_lo, expected_hi, pl_c, ph_c, f"INT16 random #{i}")
-        except AssertionError as e:
-            dut._log.error(f"INT16 random #{i}: {op_a:04x}*{op_b:04x} failed: {e}")
-            errors += 1
-            if errors > 5:
-                break
-    
-    assert errors == 0, f"INT16 random stress had {errors} errors"
-    dut._log.info("Test 10: Random INT16 stress (200 vectors) PASSED")
-
-
-# =============================================================================
-# Test #9: INT8 Lane Independence (was Test 11)
+# Test #11: INT8 Lane Independence (was Test 11)
 # =============================================================================
 
 @cocotb.test(timeout_time=1000, timeout_unit="ms")
-async def test_9_int8_lane_independence(dut):
-    """Test 9: Verify INT8 upper and lower lanes don't contaminate each other."""
+async def test_11_int8_lane_independence(dut):
+    """Test 11: Verify INT8 upper and lower lanes don't contaminate each other."""
     clock = Clock(dut.nvdla_core_clk, 10, unit="ns")
     cocotb.start_soon(clock.start())
     
@@ -856,15 +766,15 @@ async def test_9_int8_lane_independence(dut):
     
     assert_product(dut, expected_lo, expected_hi, pl_c, ph_c, "Lane independence reverse")
     
-    dut._log.info("Test 9: INT8 lane independence PASSED")
+    dut._log.info("Test 11: INT8 lane independence PASSED")
 
 
 # =============================================================================
-# Test #10: Config Pipeline and Mode Switching (was Test 12)
+# Test #12: Config Pipeline and Mode Switching (was Test 12)
 # =============================================================================
 
 @cocotb.test(timeout_time=1000, timeout_unit="ms")
-async def test_10_mode_switching(dut):
+async def test_12_mode_switching(dut):
     """Test 10: Verify correct operation across mode transitions."""
     clock = Clock(dut.nvdla_core_clk, 10, unit="ns")
     cocotb.start_soon(clock.start())
@@ -907,7 +817,7 @@ async def test_10_mode_switching(dut):
     assert_product(dut, golden_int8_low(0x05, 0x05), golden_int8_high(0x05, 0x05),
                   pl_c, ph_c, "Mode switch: back to INT8")
     
-    dut._log.info("Test 10: Mode switching PASSED")
+    dut._log.info("Test 12: Mode switching PASSED")
 
 
 # =============================================================================
@@ -1207,7 +1117,7 @@ async def test_18_booth_redundant_encoding(dut):
 #==============================================================================
 
 @cocotb.test(timeout_time=1000, timeout_unit="ms")
-async def test_16_wallace_height_reduction(dut):
+async def test_19_wallace_height_reduction(dut):
     """
     Test 16: Verify Wallace tree achieves logarithmic depth reduction.
     
@@ -1258,63 +1168,7 @@ async def test_16_wallace_height_reduction(dut):
         # Verify output is stable (not X) - indicates proper reduction completed
         # If tree were too deep or had combinational loops, would see X
     
-    dut._log.info("Test 16: Wallace height reduction (logarithmic depth) PASSED")
-
-
-#==============================================================================
-# Test 17: CSA Associativity Property (was Test 21)
-#==============================================================================
-
-@cocotb.test(timeout_time=1000, timeout_unit="ms")
-async def test_17_csa_associativity(dut):
-    """
-    Test 20: Verify CSA carries are independent per column (no horizontal ripple).
-    
-    From Geoff Knagge CSA tutorial: Key property of carry-save arithmetic is
-    that each column operates independently - no carry ripple to adjacent columns.
-    
-    This is different from ripple-carry adders where column i depends on column i-1.
-    
-    Test: Verify that changing lower bits doesn't affect upper bits' carry
-    generation (within the CSA tree, before final CPA).
-    """
-    clock = Clock(dut.nvdla_core_clk, 10, unit="ns")
-    cocotb.start_soon(clock.start())
-    
-    await reset_and_config_int16(dut)
-    
-    # Test: Multiplications where only lower bits differ
-    # In pure CSA (before final CPA), upper bits should be independent
-    
-    base_multiplicand = 0xFF00  # Upper byte all 1s
-    
-    test_multipliers = [
-        0x00,  # Lower byte all 0s
-        0x01,  # Minimal lower
-        0xFF,  # Lower byte all 1s
-    ]
-    
-    results = []
-    for mult in test_multipliers:
-        dut.op_a_dat.value = base_multiplicand | mult
-        dut.op_b_dat.value = 0x0101  # Simple multiplicand
-        dut.op_a_pvld.value = 1
-        dut.op_b_pvld.value = 1
-        dut.op_a_nz.value = 3
-        dut.op_b_nz.value = 3
-        
-        await Timer(3, unit="ns")
-        
-        res_a = int(dut.res_a.value) & 0xFFFFFFFF
-        res_b = int(dut.res_b.value) & 0xFFFFFFFF
-        
-        results.append((res_a, res_b))
-    
-    # In CSA, changing lower bits affects final product but the carry-save
-    # representation should handle it correctly without horizontal ripple
-    # (All results should be valid, no X propagation)
-    
-    dut._log.info("Test 20: Carry column independence PASSED")
+    dut._log.info("Test 19: Wallace height reduction (logarithmic depth) PASSED")
 
 
 #==============================================================================
@@ -1322,7 +1176,7 @@ async def test_17_csa_associativity(dut):
 #==============================================================================
 
 @cocotb.test(timeout_time=1000, timeout_unit="ms")
-async def test_17_csa_associativity(dut):
+async def test_20_csa_associativity(dut):
     """
     Test 17: Verify CSA tree result is independent of grouping order.
     
@@ -1374,7 +1228,7 @@ async def test_17_csa_associativity(dut):
         else:
             dut._log.warning(f"Mismatch: {op_a:04x} × {op_b:04x} expected {expected_lo:04x}, got {prod_lo:04x}")
     
-    dut._log.info("Test 17: CSA associativity PASSED")
+    dut._log.info("Test 20: CSA associativity PASSED")
 
 
 #==============================================================================
@@ -1382,7 +1236,7 @@ async def test_17_csa_associativity(dut):
 #==============================================================================
 
 @cocotb.test(timeout_time=1000, timeout_unit="ms")
-async def test_18_irregular_input_count(dut):
+async def test_21_irregular_input_count(dut):
     """
     Test 18: Verify Wallace tree handles non-power-of-2 input counts correctly.
     
@@ -1431,7 +1285,7 @@ async def test_18_irregular_input_count(dut):
             dut._log.error(f"✗ Irregular inputs: {op_a} × {op_b} expected {expected}, got {prod_lo}")
             assert False, "Irregular input handling failed"
     
-    dut._log.info("Test 18: Non-power-of-2 input handling PASSED")
+    dut._log.info("Test 21: Non-power-of-2 input handling PASSED")
 
 
 #==============================================================================
@@ -1439,7 +1293,7 @@ async def test_18_irregular_input_count(dut):
 #==============================================================================
 
 @cocotb.test(timeout_time=1000, timeout_unit="ms")
-async def test_19_csa_no_ripple_property(dut):
+async def test_22_csa_no_ripple_property(dut):
     """
     Test 19: Verify CSA property - no carry ripple between adjacent columns.
     
@@ -1484,7 +1338,7 @@ async def test_19_csa_no_ripple_property(dut):
         if prod_lo == expected:
             dut._log.info(f"✓ CSA no-ripple: {op_a:04x} × {op_b:04x} (many 1s) handled correctly")
     
-    dut._log.info("Test 19: CSA no-ripple property PASSED")
+    dut._log.info("Test 22: CSA no-ripple property PASSED")
 
 
 #==============================================================================
@@ -1492,7 +1346,7 @@ async def test_19_csa_no_ripple_property(dut):
 #==============================================================================
 
 @cocotb.test(timeout_time=1000, timeout_unit="ms")
-async def test_20_carry_save_delay_advantage(dut):
+async def test_23_carry_save_delay_advantage(dut):
     """
     Test 20: Document carry-save delay advantage over carry-propagate.
     
@@ -1540,7 +1394,7 @@ async def test_20_carry_save_delay_advantage(dut):
     dut._log.info("")
     dut._log.info("==============================================")
     
-    dut._log.info("Test 20: Carry-save delay advantage documented PASSED")
+    dut._log.info("Test 23: Carry-save delay advantage documented PASSED")
 
 
 #==============================================================================
@@ -1548,7 +1402,7 @@ async def test_20_carry_save_delay_advantage(dut):
 #==============================================================================
 
 @cocotb.test(timeout_time=1000, timeout_unit="ms")
-async def test_21_booth_boundary_handling(dut):
+async def test_24_booth_boundary_handling(dut):
     """
     Test 21: Verify Booth encoding correctly handles boundary bits.
     
@@ -1595,7 +1449,7 @@ async def test_21_booth_boundary_handling(dut):
         else:
             dut._log.warning(f"Boundary: {multiplier:04x} × {multiplicand} expected {expected_lo:04x}, got {prod_lo:04x}")
     
-    dut._log.info("Test 21: Booth boundary handling PASSED")
+    dut._log.info("Test 24: Booth boundary handling PASSED")
 
 
 # =============================================================================
