@@ -1471,18 +1471,23 @@ def test_NV_NVDLA_CMAC_CORE_MAC_mul_hidden_runner():
         proj_path / "sources/vmod/vlibs/NV_DW02_tree.v",  # Needed for baseline (uses DW02_tree)
     ]
     
-    # Conditionally add Wallace tree files if they exist (golden branch has them, baseline doesn't)
-    wallace_files = [
-        "sources/vmod/nvdla/cmac/NV_NVDLA_CMAC_CORE_wallace_5to2_FIXED.v",
-        "sources/vmod/nvdla/cmac/NV_NVDLA_CMAC_CORE_wallace_4to2_FIXED.v",
-        "sources/vmod/nvdla/cmac/NV_NVDLA_CMAC_CORE_csa32.v",
-        "sources/vmod/nvdla/cmac/NV_NVDLA_CMAC_CORE_csa42.v",
-    ]
+    # Auto-discover Wallace tree and CSA files (flexible approach)
+    # This allows agents to use any naming convention they choose
+    cmac_dir = proj_path / "sources/vmod/nvdla/cmac"
+    vlibs_dir = proj_path / "sources/vmod/vlibs"
     
-    for wallace_file in wallace_files:
-        wallace_path = proj_path / wallace_file
-        if wallace_path.exists():
-            sources.append(wallace_path)
+    # Search for Wallace/CSA files in cmac directory (preferred location)
+    for pattern in ["*wallace*.v", "*csa*.v", "*CSA*.v"]:
+        for file_path in cmac_dir.glob(pattern):
+            if file_path not in sources and file_path.name != "NV_NVDLA_CMAC_CORE_MAC_mul.v":
+                sources.append(file_path)
+    
+    # Also check vlibs as fallback (in case agents place files there)
+    for pattern in ["*wallace*.v", "*csa*.v", "*CSA*.v"]:
+        for file_path in vlibs_dir.glob(pattern):
+            # Don't include NV_DW02_tree.v (already included)
+            if file_path not in sources and file_path.name != "NV_DW02_tree.v":
+                sources.append(file_path)
     
     runner = get_runner(sim)
     runner.build(
