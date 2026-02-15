@@ -1489,6 +1489,46 @@ def test_NV_NVDLA_CMAC_CORE_MAC_mul_hidden_runner():
             if file_path not in sources and file_path.name != "NV_DW02_tree.v":
                 sources.append(file_path)
     
+    # Structural verification: Check for Wallace tree implementation
+    print("\n" + "="*70)
+    print("STRUCTURAL VERIFICATION: Wallace Tree Implementation")
+    print("="*70)
+    
+    # Check 1: Verify CSA modules exist
+    csa32_files = list(cmac_dir.glob("*csa32*.v")) + list(vlibs_dir.glob("*csa32*.v"))
+    csa42_files = list(cmac_dir.glob("*csa42*.v")) + list(vlibs_dir.glob("*csa42*.v"))
+    wallace_files = list(cmac_dir.glob("*wallace*.v")) + list(vlibs_dir.glob("*wallace*.v"))
+    
+    print(f"Found {len(csa32_files)} CSA 3:2 compressor file(s)")
+    print(f"Found {len(csa42_files)} CSA 4:2 compressor file(s)")
+    print(f"Found {len(wallace_files)} Wallace tree file(s)")
+    
+    # Verify minimum requirements
+    if len(csa32_files) == 0:
+        print("⚠️  WARNING: No CSA 3:2 compressor found (NV_NVDLA_CMAC_CORE_csa32.v)")
+        print("   Wallace tree requires CSA building blocks")
+    else:
+        print(f"✓ CSA 3:2 compressor found: {csa32_files[0].name}")
+    
+    if len(wallace_files) < 2:
+        print(f"⚠️  WARNING: Expected at least 2 Wallace tree modules (5-input, 4-input), found {len(wallace_files)}")
+    else:
+        print(f"✓ Wallace tree modules found: {', '.join([f.name for f in wallace_files[:2]])}")
+    
+    # Check 2: Verify NV_DW02_tree is replaced (not just used as fallback)
+    mac_mul_content = (proj_path / "sources/vmod/nvdla/cmac/NV_NVDLA_CMAC_CORE_MAC_mul.v").read_text()
+    
+    # Count how many times wallace is mentioned (should be >0 if replaced)
+    wallace_refs = mac_mul_content.lower().count("wallace")
+    dw02_active = "NV_DW02_tree #(" in mac_mul_content and "`else" in mac_mul_content
+    
+    if wallace_refs > 0:
+        print(f"✓ Wallace tree referenced {wallace_refs} times in MAC_mul.v")
+    elif dw02_active:
+        print("⚠️  NV_DW02_tree still appears to be in use (not replaced)")
+    
+    print("="*70 + "\n")
+    
     runner = get_runner(sim)
     runner.build(
         sources=sources, 
