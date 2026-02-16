@@ -298,6 +298,34 @@ def set_operands_valid(dut, op_a, op_b):
 # =============================================================================
 # Test #1: Reset Behavior
 # =============================================================================
+@cocotb.test(timeout_time=500, timeout_unit="ms")
+async def test_00_csa_modules_exist_check(dut):
+    """
+    Test 0: CSA Module Existence Verification.
+    
+    This test documents that CSA modules should exist in the implementation.
+    Actual verification happens at pytest runner level (file checks).
+    
+    Baseline: No CSA modules (uses NV_DW02_tree)
+    Wallace: Has CSA modules (csa32, csa42)
+    
+    The structural verification in the pytest runner reports:
+    - Number of CSA files found
+    - Which modules exist
+    - Whether NV_DW02_tree is replaced
+    """
+    # This test always passes - it's documentation
+    # Real verification is the structural check in pytest runner
+    dut._log.info("CSA Module Verification:")
+    dut._log.info("  - CSA module file checks: See pytest output")
+    dut._log.info("  - Wallace tree file checks: See pytest output") 
+    dut._log.info("  - NV_DW02_tree replacement: See pytest output")
+    dut._log.info("")
+    dut._log.info("This test documents the requirement for CSA modules.")
+    dut._log.info("Baseline (NV_DW02_tree): No CSA modules needed")
+    dut._log.info("Wallace tree: Requires CSA building blocks")
+
+
 @cocotb.test(timeout_time=1000, timeout_unit="ms")
 async def test_1_reset_behavior(dut):
     """Test 1: Verify reset clears all outputs."""
