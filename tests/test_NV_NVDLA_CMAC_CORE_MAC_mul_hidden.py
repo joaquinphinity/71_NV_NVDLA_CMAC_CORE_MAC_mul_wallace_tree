@@ -1453,87 +1453,312 @@ async def test_24_booth_boundary_handling(dut):
 
 
 # =============================================================================
-# Pytest Runner
+
+
+# =============================================================================
+# CSA Component Tests (8 tests total)
 # =============================================================================
 
+@cocotb.test(timeout_time=500, timeout_unit="ms")
+async def test_csa32_zeros(dut):
+    """CSA32 Test 1: All zeros input."""
+    dut.in0.value = 0
+    dut.in1.value = 0
+    dut.in2.value = 0
+    await Timer(1, unit="ns")
+    
+    sum_val = int(dut.sum.value)
+    carry_val = int(dut.carry.value)
+    
+    assert sum_val == 0, f"Sum should be 0, got {sum_val:x}"
+    assert carry_val == 0, f"Carry should be 0, got {carry_val:x}"
+    dut._log.info("CSA32 Test 1: All zeros PASSED")
+
+@cocotb.test(timeout_time=500, timeout_unit="ms")
+async def test_csa32_basic_arithmetic(dut):
+    """CSA32 Test 2: Basic arithmetic verification."""
+    dut.in0.value = 5
+    dut.in1.value = 3
+    dut.in2.value = 2
+    await Timer(1, unit="ns")
+    
+    sum_val = int(dut.sum.value)
+    carry_val = int(dut.carry.value)
+    result = sum_val + carry_val
+    expected = 5 + 3 + 2
+    
+    assert result == expected, f"CSA result {result} != expected {expected}"
+    dut._log.info("CSA32 Test 2: Basic arithmetic PASSED")
+
+@cocotb.test(timeout_time=500, timeout_unit="ms")
+async def test_csa32_bitwise_xor(dut):
+    """CSA32 Test 3: Verify sum is XOR of inputs."""
+    test_patterns = [(0x5, 0xA, 0xF), (0xFF, 0xFF, 0x00), (0xAA, 0x55, 0xFF)]
+    
+    for in0, in1, in2 in test_patterns:
+        dut.in0.value = in0
+        dut.in1.value = in1
+        dut.in2.value = in2
+        await Timer(1, unit="ns")
+        
+        sum_val = int(dut.sum.value)
+        expected_sum = in0 ^ in1 ^ in2
+        assert sum_val == expected_sum, f"Sum XOR check failed: {sum_val:x} != {expected_sum:x}"
+    
+    dut._log.info("CSA32 Test 3: Bitwise XOR PASSED")
+
+@cocotb.test(timeout_time=500, timeout_unit="ms")
+async def test_csa32_carry_majority(dut):
+    """CSA32 Test 4: Verify carry is majority function."""
+    test_cases = [(0b001, 0b001, 0b000, 0b0010), (0b111, 0b111, 0b000, 0b1110), (0b111, 0b111, 0b111, 0b1110)]
+    
+    for in0, in1, in2, expected_carry in test_cases:
+        dut.in0.value = in0
+        dut.in1.value = in1
+        dut.in2.value = in2
+        await Timer(1, unit="ns")
+        
+        carry_val = int(dut.carry.value)
+        assert carry_val == expected_carry, f"Carry majority check: {carry_val:b} != {expected_carry:b}"
+    
+    dut._log.info("CSA32 Test 4: Carry majority PASSED")
+
+@cocotb.test(timeout_time=1000, timeout_unit="ms")
+async def test_csa32_random(dut):
+    """CSA32 Test 5: Random test vectors."""
+    random.seed(42)
+    errors = 0
+    width = 24
+    mask = (1 << width) - 1
+    
+    for i in range(100):
+        in0 = random.randint(0, mask)
+        in1 = random.randint(0, mask)
+        in2 = random.randint(0, mask)
+        
+        dut.in0.value = in0
+        dut.in1.value = in1
+        dut.in2.value = in2
+        await Timer(1, unit="ns")
+        
+        sum_val = int(dut.sum.value) & mask
+        carry_val = int(dut.carry.value) & mask
+        result = (sum_val + carry_val) & mask
+        expected = (in0 + in1 + in2) & mask
+        
+        if result != expected:
+            errors += 1
+            if errors <= 5:
+                dut._log.error(f"CSA32 test {i}: {in0:x}+{in1:x}+{in2:x} = {result:x}, expected {expected:x}")
+    
+    assert errors == 0, f"CSA32 random test had {errors} errors"
+    dut._log.info("CSA32 Test 5: Random (100 vectors) PASSED")
+
+@cocotb.test(timeout_time=500, timeout_unit="ms")
+async def test_csa42_basic(dut):
+    """CSA42 Test 1: Basic arithmetic verification."""
+    dut.in0.value = 1
+    dut.in1.value = 1
+    dut.in2.value = 1
+    dut.in3.value = 1
+    dut.cin.value = 0
+    await Timer(1, unit="ns")
+    
+    sum_val = int(dut.sum.value)
+    carry_val = int(dut.carry.value)
+    cout_val = int(dut.cout.value)
+    result = sum_val + carry_val + cout_val
+    expected = 1 + 1 + 1 + 1 + 0
+    
+    assert result == expected, f"CSA42 result {result} != {expected}"
+    dut._log.info("CSA42 Test 1: Basic arithmetic PASSED")
+
+@cocotb.test(timeout_time=500, timeout_unit="ms")
+async def test_csa42_carry_independence(dut):
+    """CSA42 Test 2: Verify cout independent of cin."""
+    dut.in0.value = 7
+    dut.in1.value = 5
+    dut.in2.value = 3
+    dut.in3.value = 2
+    
+    dut.cin.value = 0
+    await Timer(1, unit="ns")
+    cout_0 = int(dut.cout.value)
+    
+    dut.cin.value = (1 << 24) - 1
+    await Timer(1, unit="ns")
+    cout_1 = int(dut.cout.value)
+    
+    assert cout_0 == cout_1, f"cout should be independent of cin: {cout_0:x} != {cout_1:x}"
+    dut._log.info("CSA42 Test 2: Carry independence PASSED")
+
+@cocotb.test(timeout_time=1000, timeout_unit="ms")
+async def test_csa42_random(dut):
+    """CSA42 Test 3: Random test vectors."""
+    random.seed(99)
+    errors = 0
+    width = 24
+    mask = (1 << width) - 1
+    
+    for i in range(50):
+        in0 = random.randint(0, mask)
+        in1 = random.randint(0, mask)
+        in2 = random.randint(0, mask)
+        in3 = random.randint(0, mask)
+        cin = random.randint(0, mask)
+        
+        dut.in0.value = in0
+        dut.in1.value = in1
+        dut.in2.value = in2
+        dut.in3.value = in3
+        dut.cin.value = cin
+        await Timer(1, unit="ns")
+        
+        sum_val = int(dut.sum.value) & mask
+        carry_val = int(dut.carry.value) & mask
+        cout_val = int(dut.cout.value) & mask
+        
+        result = (sum_val + carry_val + cout_val) & mask
+        expected = (in0 + in1 + in2 + in3 + cin) & mask
+        
+        if result != expected:
+            errors += 1
+    
+    assert errors == 0, f"CSA42 random test had {errors} errors"
+    dut._log.info("CSA42 Test 3: Random (50 vectors) PASSED")
 
 
-# Pytest Runner
-def test_NV_NVDLA_CMAC_CORE_MAC_mul_hidden_runner():
-    """Pytest entry point for HUD evaluation."""
+# =============================================================================
+# PYTEST RUNNERS - Option A (3 Component-Level Tests)
+# =============================================================================
+# HUD sees: 3 pytest tests
+# Baseline: 1/3 pass (33%), Golden: 3/3 pass (100%)
+# Cocotb logs show all 29 individual test details
+# =============================================================================
+
+def test_session1_csa32_component():
+    """
+    Session 1: CSA 3:2 Compressor Tests (5 tests).
+    FAILS if NV_NVDLA_CMAC_CORE_csa32 module not found.
+    """
+    import pytest
     sim = os.getenv("SIM", "icarus")
     proj_path = Path(__file__).resolve().parent.parent
     
-    # Base sources that always exist
+    cmac_dir = proj_path / "sources/vmod/nvdla/cmac"
+    vlibs_dir = proj_path / "sources/vmod/vlibs"
+    csa32_files = list(cmac_dir.glob("*csa32*.v")) + list(vlibs_dir.glob("*csa32*.v"))
+    
+    if len(csa32_files) == 0:
+        pytest.fail(
+            "CSA 3:2 compressor module not found\n"
+            "Expected: NV_NVDLA_CMAC_CORE_csa32.v in sources/vmod/nvdla/cmac/ or sources/vmod/vlibs/"
+        )
+    
+    print(f"\n{'='*70}")
+    print(f"SESSION 1: CSA 3:2 Compressor Tests")
+    print(f"Module: {csa32_files[0].name}")
+    print(f"{'='*70}")
+    
+    runner = get_runner(sim)
+    runner.build(
+        sources=[proj_path / "tests/timescale.v", csa32_files[0]],
+        hdl_toplevel="NV_NVDLA_CMAC_CORE_csa32",
+        always=True
+    )
+    runner.test(
+        hdl_toplevel="NV_NVDLA_CMAC_CORE_csa32",
+        test_module="test_NV_NVDLA_CMAC_CORE_MAC_mul_hidden",
+        testcase="test_csa32_.*"
+    )
+
+def test_session2_csa42_component():
+    """
+    Session 2: CSA 4:2 Compressor Tests (3 tests).
+    FAILS if NV_NVDLA_CMAC_CORE_csa42 module not found.
+    """
+    import pytest
+    sim = os.getenv("SIM", "icarus")
+    proj_path = Path(__file__).resolve().parent.parent
+    
+    cmac_dir = proj_path / "sources/vmod/nvdla/cmac"
+    vlibs_dir = proj_path / "sources/vmod/vlibs"
+    csa42_files = list(cmac_dir.glob("*csa42*.v")) + list(vlibs_dir.glob("*csa42*.v"))
+    
+    if len(csa42_files) == 0:
+        pytest.fail(
+            "CSA 4:2 compressor module not found\n"
+            "Expected: NV_NVDLA_CMAC_CORE_csa42.v in sources/vmod/nvdla/cmac/ or sources/vmod/vlibs/"
+        )
+    
+    print(f"\n{'='*70}")
+    print(f"SESSION 2: CSA 4:2 Compressor Tests")
+    print(f"Module: {csa42_files[0].name}")
+    print(f"{'='*70}")
+    
+    runner = get_runner(sim)
+    runner.build(
+        sources=[proj_path / "tests/timescale.v", csa42_files[0]],
+        hdl_toplevel="NV_NVDLA_CMAC_CORE_csa42",
+        always=True
+    )
+    runner.test(
+        hdl_toplevel="NV_NVDLA_CMAC_CORE_csa42",
+        test_module="test_NV_NVDLA_CMAC_CORE_MAC_mul_hidden",
+        testcase="test_csa42_.*"
+    )
+
+def test_session3_multiplier_integration():
+    """
+    Session 3: Multiplier Integration Tests (21 tests).
+    Tests full NV_NVDLA_CMAC_CORE_MAC_mul module.
+    """
+    sim = os.getenv("SIM", "icarus")
+    proj_path = Path(__file__).resolve().parent.parent
+    
     sources = [
         proj_path / "tests/timescale.v",
         proj_path / "sources/vmod/nvdla/cmac/NV_NVDLA_CMAC_CORE_MAC_mul.v",
-        proj_path / "sources/vmod/vlibs/NV_DW02_tree.v",  # Needed for baseline (uses DW02_tree)
+        proj_path / "sources/vmod/vlibs/NV_DW02_tree.v",
     ]
     
-    # Auto-discover Wallace tree and CSA files (flexible approach)
-    # This allows agents to use any naming convention they choose
+    # Auto-discover Wallace/CSA files
     cmac_dir = proj_path / "sources/vmod/nvdla/cmac"
     vlibs_dir = proj_path / "sources/vmod/vlibs"
     
-    # Search for Wallace/CSA files in cmac directory (preferred location)
     for pattern in ["*wallace*.v", "*csa*.v", "*CSA*.v"]:
         for file_path in cmac_dir.glob(pattern):
             if file_path not in sources and file_path.name != "NV_NVDLA_CMAC_CORE_MAC_mul.v":
                 sources.append(file_path)
     
-    # Also check vlibs as fallback (in case agents place files there)
     for pattern in ["*wallace*.v", "*csa*.v", "*CSA*.v"]:
         for file_path in vlibs_dir.glob(pattern):
-            # Don't include NV_DW02_tree.v (already included)
             if file_path not in sources and file_path.name != "NV_DW02_tree.v":
                 sources.append(file_path)
     
-    # Structural verification: Check for Wallace tree implementation
-    print("\n" + "="*70)
-    print("STRUCTURAL VERIFICATION: Wallace Tree Implementation")
-    print("="*70)
+    # Structural verification
+    print(f"\n{'='*70}")
+    print("SESSION 3: Multiplier Integration Tests")
+    print(f"{'='*70}")
     
-    # Check 1: Verify CSA modules exist
     csa32_files = list(cmac_dir.glob("*csa32*.v")) + list(vlibs_dir.glob("*csa32*.v"))
     csa42_files = list(cmac_dir.glob("*csa42*.v")) + list(vlibs_dir.glob("*csa42*.v"))
     wallace_files = list(cmac_dir.glob("*wallace*.v")) + list(vlibs_dir.glob("*wallace*.v"))
     
-    print(f"Found {len(csa32_files)} CSA 3:2 compressor file(s)")
-    print(f"Found {len(csa42_files)} CSA 4:2 compressor file(s)")
-    print(f"Found {len(wallace_files)} Wallace tree file(s)")
-    
-    # Verify minimum requirements
-    if len(csa32_files) == 0:
-        print("⚠️  WARNING: No CSA 3:2 compressor found (NV_NVDLA_CMAC_CORE_csa32.v)")
-        print("   Wallace tree requires CSA building blocks")
-    else:
-        print(f"✓ CSA 3:2 compressor found: {csa32_files[0].name}")
-    
-    if len(wallace_files) < 2:
-        print(f"⚠️  WARNING: Expected at least 2 Wallace tree modules (5-input, 4-input), found {len(wallace_files)}")
-    else:
-        print(f"✓ Wallace tree modules found: {', '.join([f.name for f in wallace_files[:2]])}")
-    
-    # Check 2: Verify NV_DW02_tree is replaced (not just used as fallback)
-    mac_mul_content = (proj_path / "sources/vmod/nvdla/cmac/NV_NVDLA_CMAC_CORE_MAC_mul.v").read_text()
-    
-    # Count how many times wallace is mentioned (should be >0 if replaced)
-    wallace_refs = mac_mul_content.lower().count("wallace")
-    dw02_active = "NV_DW02_tree #(" in mac_mul_content and "`else" in mac_mul_content
-    
-    if wallace_refs > 0:
-        print(f"✓ Wallace tree referenced {wallace_refs} times in MAC_mul.v")
-    elif dw02_active:
-        print("⚠️  NV_DW02_tree still appears to be in use (not replaced)")
-    
-    print("="*70 + "\n")
+    print(f"CSA 3:2 files: {len(csa32_files)}")
+    print(f"CSA 4:2 files: {len(csa42_files)}")
+    print(f"Wallace files: {len(wallace_files)}")
+    print(f"{'='*70}")
     
     runner = get_runner(sim)
     runner.build(
-        sources=sources, 
-        hdl_toplevel="NV_NVDLA_CMAC_CORE_MAC_mul", 
+        sources=sources,
+        hdl_toplevel="NV_NVDLA_CMAC_CORE_MAC_mul",
         always=True,
-        defines={"DESIGNWARE_NOEXIST": 1}  # Use NV_DW02_tree instead of commercial DW02_tree
+        defines={"DESIGNWARE_NOEXIST": 1}
     )
-    runner.test(hdl_toplevel="NV_NVDLA_CMAC_CORE_MAC_mul", test_module="test_NV_NVDLA_CMAC_CORE_MAC_mul_hidden")
+    runner.test(
+        hdl_toplevel="NV_NVDLA_CMAC_CORE_MAC_mul",
+        test_module="test_NV_NVDLA_CMAC_CORE_MAC_mul_hidden",
+        testcase="test_[0-9]+_.*"  # Only numbered tests (excludes CSA tests)
+    )
