@@ -298,32 +298,129 @@ def set_operands_valid(dut, op_a, op_b):
 # =============================================================================
 # Test #1: Reset Behavior
 # =============================================================================
+
+
+
+
+# =============================================================================
+# STRUCTURAL VERIFICATION TESTS (Session 4)
+# These tests verify Wallace tree implementation structure
+# =============================================================================
+
 @cocotb.test(timeout_time=500, timeout_unit="ms")
-async def test_00_csa_modules_exist_check(dut):
+async def test_struct_01_csa32_module_exists(dut):
     """
-    Test 0: CSA Module Existence Verification.
+    Structural Test 1: Verify CSA 3:2 compressor module exists.
     
-    This test documents that CSA modules should exist in the implementation.
-    Actual verification happens at pytest runner level (file checks).
+    FAILS on baseline (no CSA32 module).
+    PASSES on golden (has NV_NVDLA_CMAC_CORE_csa32.v).
     
-    Baseline: No CSA modules (uses NV_DW02_tree)
-    Wallace: Has CSA modules (csa32, csa42)
-    
-    The structural verification in the pytest runner reports:
-    - Number of CSA files found
-    - Which modules exist
-    - Whether NV_DW02_tree is replaced
+    Note: This test runs with multiplier as DUT, but checks for CSA files.
+    The actual CSA functionality is tested in Session 1.
     """
-    # This test always passes - it's documentation
-    # Real verification is the structural check in pytest runner
-    dut._log.info("CSA Module Verification:")
-    dut._log.info("  - CSA module file checks: See pytest output")
-    dut._log.info("  - Wallace tree file checks: See pytest output") 
-    dut._log.info("  - NV_DW02_tree replacement: See pytest output")
-    dut._log.info("")
-    dut._log.info("This test documents the requirement for CSA modules.")
-    dut._log.info("Baseline (NV_DW02_tree): No CSA modules needed")
-    dut._log.info("Wallace tree: Requires CSA building blocks")
+    from pathlib import Path
+    proj_path = Path(__file__).resolve().parent.parent
+    cmac_dir = proj_path / "sources/vmod/nvdla/cmac"
+    vlibs_dir = proj_path / "sources/vmod/vlibs"
+    
+    csa32_files = list(cmac_dir.glob("*csa32*.v")) + list(vlibs_dir.glob("*csa32*.v"))
+    
+    assert len(csa32_files) > 0,         "CSA 3:2 module not found. Wallace tree requires NV_NVDLA_CMAC_CORE_csa32.v"
+    
+    dut._log.info(f"✓ CSA 3:2 module found: {csa32_files[0].name}")
+
+@cocotb.test(timeout_time=500, timeout_unit="ms")
+async def test_struct_02_csa42_module_exists(dut):
+    """
+    Structural Test 2: Verify CSA 4:2 compressor module exists.
+    
+    FAILS on baseline (no CSA42 module).
+    PASSES on golden (has NV_NVDLA_CMAC_CORE_csa42.v).
+    """
+    from pathlib import Path
+    proj_path = Path(__file__).resolve().parent.parent
+    cmac_dir = proj_path / "sources/vmod/nvdla/cmac"
+    vlibs_dir = proj_path / "sources/vmod/vlibs"
+    
+    csa42_files = list(cmac_dir.glob("*csa42*.v")) + list(vlibs_dir.glob("*csa42*.v"))
+    
+    assert len(csa42_files) > 0,         "CSA 4:2 module not found. Wallace tree requires NV_NVDLA_CMAC_CORE_csa42.v"
+    
+    dut._log.info(f"✓ CSA 4:2 module found: {csa42_files[0].name}")
+
+@cocotb.test(timeout_time=500, timeout_unit="ms")
+async def test_struct_03_wallace_modules_exist(dut):
+    """
+    Structural Test 3: Verify Wallace tree modules exist.
+    
+    FAILS on baseline (no Wallace modules).
+    PASSES on golden (has wallace_4to2 and wallace_5to2 modules).
+    """
+    from pathlib import Path
+    proj_path = Path(__file__).resolve().parent.parent
+    cmac_dir = proj_path / "sources/vmod/nvdla/cmac"
+    vlibs_dir = proj_path / "sources/vmod/vlibs"
+    
+    wallace_files = list(cmac_dir.glob("*wallace*.v")) + list(vlibs_dir.glob("*wallace*.v"))
+    
+    assert len(wallace_files) >= 2,         f"Wallace modules not found. Expected ≥2 files (*wallace*.v), found {len(wallace_files)}"
+    
+    dut._log.info(f"✓ Found {len(wallace_files)} Wallace modules:")
+    for wf in wallace_files[:3]:
+        dut._log.info(f"  - {wf.name}")
+
+@cocotb.test(timeout_time=500, timeout_unit="ms")
+async def test_struct_04_dw02_tree_replaced(dut):
+    """
+    Structural Test 4: Verify NV_DW02_tree is replaced (not actively used).
+    
+    FAILS on baseline (uses NV_DW02_tree via ifdef).
+    PASSES on golden (uses Wallace tree, NV_DW02_tree removed).
+    """
+    from pathlib import Path
+    proj_path = Path(__file__).resolve().parent.parent
+    mac_mul_path = proj_path / "sources/vmod/nvdla/cmac/NV_NVDLA_CMAC_CORE_MAC_mul.v"
+    
+    mac_mul_content = mac_mul_path.read_text()
+    
+    # Check that wallace is referenced (indicates replacement)
+    wallace_refs = mac_mul_content.lower().count("wallace")
+    
+    # Check if NV_DW02_tree is still actively instantiated (not just in ifdef fallback)
+    dw02_active = "NV_DW02_tree #(" in mac_mul_content and "`else" not in mac_mul_content.split("NV_DW02_tree #(")[0][-100:]
+    
+    assert wallace_refs > 0,         f"Wallace tree not referenced in MAC_mul.v. Found {wallace_refs} references."
+    
+    assert not dw02_active,         "NV_DW02_tree still actively used (not in ifdef fallback). Wallace tree not properly integrated."
+    
+    dut._log.info(f"✓ Wallace tree referenced {wallace_refs} times in MAC_mul.v")
+    dut._log.info("✓ NV_DW02_tree properly replaced (only in ifdef fallback)")
+
+@cocotb.test(timeout_time=500, timeout_unit="ms")
+async def test_struct_05_minimum_file_count(dut):
+    """
+    Structural Test 5: Verify minimum file requirements met.
+    
+    FAILS on baseline (0 CSA files, 0 Wallace files).
+    PASSES on golden (≥1 CSA32, ≥1 CSA42, ≥2 Wallace).
+    """
+    from pathlib import Path
+    proj_path = Path(__file__).resolve().parent.parent
+    cmac_dir = proj_path / "sources/vmod/nvdla/cmac"
+    vlibs_dir = proj_path / "sources/vmod/vlibs"
+    
+    csa32_files = list(cmac_dir.glob("*csa32*.v")) + list(vlibs_dir.glob("*csa32*.v"))
+    csa42_files = list(cmac_dir.glob("*csa42*.v")) + list(vlibs_dir.glob("*csa42*.v"))
+    wallace_files = list(cmac_dir.glob("*wallace*.v")) + list(vlibs_dir.glob("*wallace*.v"))
+    
+    assert len(csa32_files) >= 1, f"Expected ≥1 CSA32 file, found {len(csa32_files)}"
+    assert len(csa42_files) >= 1, f"Expected ≥1 CSA42 file, found {len(csa42_files)}"
+    assert len(wallace_files) >= 2, f"Expected ≥2 Wallace files, found {len(wallace_files)}"
+    
+    dut._log.info(f"✓ File count validation passed:")
+    dut._log.info(f"  - CSA32: {len(csa32_files)} file(s)")
+    dut._log.info(f"  - CSA42: {len(csa42_files)} file(s)")
+    dut._log.info(f"  - Wallace: {len(wallace_files)} file(s)")
 
 
 @cocotb.test(timeout_time=1000, timeout_unit="ms")
@@ -1789,4 +1886,76 @@ def test_session3_multiplier_integration():
         hdl_toplevel="NV_NVDLA_CMAC_CORE_MAC_mul",
         test_module="test_NV_NVDLA_CMAC_CORE_MAC_mul_hidden",
         testcase="test_[0-9]+_.*"  # Only numbered tests (excludes CSA tests)
+    )
+
+
+def test_session4_structural_verification():
+    """
+    Session 4: Structural Verification Tests (5 tests).
+    
+    Verifies Wallace tree implementation structure:
+    - CSA module files exist
+    - Wallace tree files exist
+    - NV_DW02_tree is replaced
+    - Minimum file requirements met
+    
+    CRITICAL: These tests FAIL on baseline (no Wallace tree files).
+    """
+    import pytest
+    sim = os.getenv("SIM", "icarus")
+    proj_path = Path(__file__).resolve().parent.parent
+    
+    # Check if Wallace tree files exist before building
+    cmac_dir = proj_path / "sources/vmod/nvdla/cmac"
+    vlibs_dir = proj_path / "sources/vmod/vlibs"
+    
+    csa32_files = list(cmac_dir.glob("*csa32*.v")) + list(vlibs_dir.glob("*csa32*.v"))
+    csa42_files = list(cmac_dir.glob("*csa42*.v")) + list(vlibs_dir.glob("*csa42*.v"))
+    wallace_files = list(cmac_dir.glob("*wallace*.v")) + list(vlibs_dir.glob("*wallace*.v"))
+    
+    # If no CSA/Wallace files found, fail early
+    if len(csa32_files) == 0 or len(wallace_files) == 0:
+        pytest.fail(
+            f"Structural verification failed:\n"
+            f"  - CSA32 files: {len(csa32_files)} (expected ≥1)\n"
+            f"  - CSA42 files: {len(csa42_files)} (expected ≥1)\n"
+            f"  - Wallace files: {len(wallace_files)} (expected ≥2)\n"
+            f"Wallace tree implementation requires these modules."
+        )
+    
+    print(f"\n{'='*70}")
+    print("SESSION 4: Structural Verification Tests")
+    print(f"{'='*70}")
+    print(f"Files found: CSA32={len(csa32_files)}, CSA42={len(csa42_files)}, Wallace={len(wallace_files)}")
+    print(f"{'='*70}")
+    
+    # Build with multiplier as DUT (structural tests check files, not functionality)
+    sources = [
+        proj_path / "tests/timescale.v",
+        proj_path / "sources/vmod/nvdla/cmac/NV_NVDLA_CMAC_CORE_MAC_mul.v",
+        proj_path / "sources/vmod/vlibs/NV_DW02_tree.v",
+    ]
+    
+    # Add Wallace/CSA files
+    for pattern in ["*wallace*.v", "*csa*.v", "*CSA*.v"]:
+        for file_path in cmac_dir.glob(pattern):
+            if file_path not in sources and file_path.name != "NV_NVDLA_CMAC_CORE_MAC_mul.v":
+                sources.append(file_path)
+    
+    for pattern in ["*wallace*.v", "*csa*.v", "*CSA*.v"]:
+        for file_path in vlibs_dir.glob(pattern):
+            if file_path not in sources and file_path.name != "NV_DW02_tree.v":
+                sources.append(file_path)
+    
+    runner = get_runner(sim)
+    runner.build(
+        sources=sources,
+        hdl_toplevel="NV_NVDLA_CMAC_CORE_MAC_mul",
+        always=True,
+        defines={"DESIGNWARE_NOEXIST": 1}
+    )
+    runner.test(
+        hdl_toplevel="NV_NVDLA_CMAC_CORE_MAC_mul",
+        test_module="test_NV_NVDLA_CMAC_CORE_MAC_mul_hidden",
+        testcase="test_struct_.*"
     )
