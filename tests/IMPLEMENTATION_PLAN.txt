@@ -1,0 +1,26 @@
+OPTION A IMPLEMENTATION - SIMPLE APPROACH
+
+Current State on test branch (commit 88df666):
+- 21 multiplier tests (test_1 through test_24, with some gaps)  
+- 1 pytest runner
+- No CSA tests
+
+Final Goal:
+- 21 multiplier tests (keep as-is)
+- 8 CSA tests (5 CSA32 + 3 CSA42) - ADD
+- 3 pytest runners (CSA32, CSA42, Multiplier) - MODIFY
+
+Result:
+- Pytest sees: 3 tests
+- Baseline: 1/3 pass (33%) - only multiplier passes
+- Golden: 3/3 pass (100%) - all pass
+- Cocotb logs show all 29 individual test details
+
+Implementation:
+1. Add 8 CSA @cocotb.test functions (before pytest runner)
+2. Replace single pytest runner with 3 runners
+3. CSA runners use pytest.fail() when modules missing
+4. Test locally
+5. Push ONLY to test branch
+6. Test from fresh clones of baseline and golden
+
