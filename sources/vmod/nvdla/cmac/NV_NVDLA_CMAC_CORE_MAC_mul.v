@@ -523,13 +523,13 @@ end
 // MODIFIED: Wallace Tree 5:2 Reduction replacing NV_DW02_tree
 // Now uses concatenated input format (matches DW02_tree interface)
 //==========================================================
-NV_NVDLA_CMAC_CORE_wallace_5to2_FIXED #(5, 24) u_wallace_l0n0 (
+NV_NVDLA_CMAC_CORE_wallace_5to2 #(5, 24) u_wallace_l0n0 (
    .INPUT    (pp_in_l0n0[119:0])    //|< r
   ,.OUT0     (pp_out_l0n0_0[23:0])  //|> w
   ,.OUT1     (pp_out_l0n0_1[23:0])  //|> w
 );
 
-NV_NVDLA_CMAC_CORE_wallace_5to2_FIXED #(5, 24) u_wallace_l0n1 (
+NV_NVDLA_CMAC_CORE_wallace_5to2 #(5, 24) u_wallace_l0n1 (
    .INPUT    (pp_in_l0n1[119:0])    //|< r
   ,.OUT0     (pp_out_l0n1_0[23:0])  //|> w
   ,.OUT1     (pp_out_l0n1_1[23:0])  //|> w
@@ -557,7 +557,7 @@ end
 // MODIFIED: Wallace Tree 4:2 Reduction replacing NV_DW02_tree
 // Now uses concatenated input format (matches DW02_tree interface)
 //==========================================================
-NV_NVDLA_CMAC_CORE_wallace_4to2_FIXED #(4, 32) u_wallace_l1n0 (
+NV_NVDLA_CMAC_CORE_wallace_4to2 #(4, 32) u_wallace_l1n0 (
    .INPUT    (pp_in_l1n0[127:0])    //|< r
   ,.OUT0     (pp_out_l1n0_0[31:0])  //|> w
   ,.OUT1     (pp_out_l1n0_1[31:0])  //|> w
