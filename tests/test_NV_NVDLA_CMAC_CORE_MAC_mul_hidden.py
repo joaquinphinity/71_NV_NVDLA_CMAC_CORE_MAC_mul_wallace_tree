@@ -1653,30 +1653,27 @@ async def test_csa42_random(dut):
 def test_session1_csa32_component():
     """
     Session 1: CSA 3:2 Compressor Tests (5 tests).
-    FAILS if NV_NVDLA_CMAC_CORE_csa32 module not found.
+    Imports ALL .v files from cmac/ and vlibs/ so file naming is irrelevant.
+    FAILS if module NV_NVDLA_CMAC_CORE_csa32 is not defined in any source file.
     """
-    import pytest
     sim = os.getenv("SIM", "icarus")
     proj_path = Path(__file__).resolve().parent.parent
     
     cmac_dir = proj_path / "sources/vmod/nvdla/cmac"
     vlibs_dir = proj_path / "sources/vmod/vlibs"
-    csa32_files = list(cmac_dir.glob("*csa32*.v")) + list(vlibs_dir.glob("*csa32*.v"))
     
-    if len(csa32_files) == 0:
-        pytest.fail(
-            "CSA 3:2 compressor module not found\n"
-            "Expected: NV_NVDLA_CMAC_CORE_csa32.v in sources/vmod/nvdla/cmac/ or sources/vmod/vlibs/"
-        )
+    all_sources = [proj_path / "tests/timescale.v"]
+    all_sources += sorted(cmac_dir.glob("*.v"))
+    all_sources += sorted(vlibs_dir.glob("*.v"))
     
     print(f"\n{'='*70}")
     print(f"SESSION 1: CSA 3:2 Compressor Tests")
-    print(f"Module: {csa32_files[0].name}")
+    print(f"Source files: {len(all_sources)} total")
     print(f"{'='*70}")
     
     runner = get_runner(sim)
     runner.build(
-        sources=[proj_path / "tests/timescale.v", csa32_files[0]],
+        sources=all_sources,
         hdl_toplevel="NV_NVDLA_CMAC_CORE_csa32",
         always=True
     )
@@ -1689,30 +1686,27 @@ def test_session1_csa32_component():
 def test_session2_csa42_component():
     """
     Session 2: CSA 4:2 Compressor Tests (3 tests).
-    FAILS if NV_NVDLA_CMAC_CORE_csa42 module not found.
+    Imports ALL .v files from cmac/ and vlibs/ so file naming is irrelevant.
+    FAILS if module NV_NVDLA_CMAC_CORE_csa42 is not defined in any source file.
     """
-    import pytest
     sim = os.getenv("SIM", "icarus")
     proj_path = Path(__file__).resolve().parent.parent
     
     cmac_dir = proj_path / "sources/vmod/nvdla/cmac"
     vlibs_dir = proj_path / "sources/vmod/vlibs"
-    csa42_files = list(cmac_dir.glob("*csa42*.v")) + list(vlibs_dir.glob("*csa42*.v"))
     
-    if len(csa42_files) == 0:
-        pytest.fail(
-            "CSA 4:2 compressor module not found\n"
-            "Expected: NV_NVDLA_CMAC_CORE_csa42.v in sources/vmod/nvdla/cmac/ or sources/vmod/vlibs/"
-        )
+    all_sources = [proj_path / "tests/timescale.v"]
+    all_sources += sorted(cmac_dir.glob("*.v"))
+    all_sources += sorted(vlibs_dir.glob("*.v"))
     
     print(f"\n{'='*70}")
     print(f"SESSION 2: CSA 4:2 Compressor Tests")
-    print(f"Module: {csa42_files[0].name}")
+    print(f"Source files: {len(all_sources)} total")
     print(f"{'='*70}")
     
     runner = get_runner(sim)
     runner.build(
-        sources=[proj_path / "tests/timescale.v", csa42_files[0]],
+        sources=all_sources,
         hdl_toplevel="NV_NVDLA_CMAC_CORE_csa42",
         always=True
     )
@@ -1726,47 +1720,26 @@ def test_session3_multiplier_integration():
     """
     Session 3: Multiplier Integration Tests (21 tests).
     Tests full NV_NVDLA_CMAC_CORE_MAC_mul module.
+    Imports ALL .v files from cmac/ and vlibs/ so any agent-created files are included.
     """
     sim = os.getenv("SIM", "icarus")
     proj_path = Path(__file__).resolve().parent.parent
     
-    sources = [
-        proj_path / "tests/timescale.v",
-        proj_path / "sources/vmod/nvdla/cmac/NV_NVDLA_CMAC_CORE_MAC_mul.v",
-        proj_path / "sources/vmod/vlibs/NV_DW02_tree.v",
-    ]
-    
-    # Auto-discover Wallace/CSA files
     cmac_dir = proj_path / "sources/vmod/nvdla/cmac"
     vlibs_dir = proj_path / "sources/vmod/vlibs"
     
-    for pattern in ["*wallace*.v", "*csa*.v", "*CSA*.v"]:
-        for file_path in cmac_dir.glob(pattern):
-            if file_path not in sources and file_path.name != "NV_NVDLA_CMAC_CORE_MAC_mul.v":
-                sources.append(file_path)
+    all_sources = [proj_path / "tests/timescale.v"]
+    all_sources += sorted(cmac_dir.glob("*.v"))
+    all_sources += sorted(vlibs_dir.glob("*.v"))
     
-    for pattern in ["*wallace*.v", "*csa*.v", "*CSA*.v"]:
-        for file_path in vlibs_dir.glob(pattern):
-            if file_path not in sources and file_path.name != "NV_DW02_tree.v":
-                sources.append(file_path)
-    
-    # Structural verification
     print(f"\n{'='*70}")
     print("SESSION 3: Multiplier Integration Tests")
-    print(f"{'='*70}")
-    
-    csa32_files = list(cmac_dir.glob("*csa32*.v")) + list(vlibs_dir.glob("*csa32*.v"))
-    csa42_files = list(cmac_dir.glob("*csa42*.v")) + list(vlibs_dir.glob("*csa42*.v"))
-    wallace_files = list(cmac_dir.glob("*wallace*.v")) + list(vlibs_dir.glob("*wallace*.v"))
-    
-    print(f"CSA 3:2 files: {len(csa32_files)}")
-    print(f"CSA 4:2 files: {len(csa42_files)}")
-    print(f"Wallace files: {len(wallace_files)}")
+    print(f"Source files: {len(all_sources)} total")
     print(f"{'='*70}")
     
     runner = get_runner(sim)
     runner.build(
-        sources=sources,
+        sources=all_sources,
         hdl_toplevel="NV_NVDLA_CMAC_CORE_MAC_mul",
         always=True,
         defines={"DESIGNWARE_NOEXIST": 1}
@@ -1774,7 +1747,7 @@ def test_session3_multiplier_integration():
     runner.test(
         hdl_toplevel="NV_NVDLA_CMAC_CORE_MAC_mul",
         test_module="test_NV_NVDLA_CMAC_CORE_MAC_mul_hidden",
-        testcase="test_[0-9]+_.*"  # Only numbered tests (excludes CSA tests)
+        testcase="test_[0-9]+_.*"
     )
 
 
