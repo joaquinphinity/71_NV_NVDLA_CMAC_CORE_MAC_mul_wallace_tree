@@ -1675,7 +1675,8 @@ def test_session1_csa32_component():
     runner.build(
         sources=all_sources,
         hdl_toplevel="NV_NVDLA_CMAC_CORE_csa32",
-        always=True
+        always=True,
+        parameters={"WIDTH": "24"}
     )
     runner.test(
         hdl_toplevel="NV_NVDLA_CMAC_CORE_csa32",
@@ -1708,7 +1709,8 @@ def test_session2_csa42_component():
     runner.build(
         sources=all_sources,
         hdl_toplevel="NV_NVDLA_CMAC_CORE_csa42",
-        always=True
+        always=True,
+        parameters={"WIDTH": "24"}
     )
     runner.test(
         hdl_toplevel="NV_NVDLA_CMAC_CORE_csa42",
