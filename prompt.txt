@@ -1,9 +1,5 @@
 OPTIMIZE THE CMAC MULTIPLIER WITH A STRUCTURAL WALLACE TREE
 
-The Problem
-
-The CMAC multiplier uses generic NV_DW02_tree modules for carry-save addition (CSA) tree reduction. Replace these with an explicit structural Wallace tree implementation for better performance and synthesis predictability.
-
 What is a Wallace Tree
 
 A Wallace tree is a parallel reduction structure that compresses multiple operands down to two values (sum and carry) using layers of carry-save adders. Unlike sequential addition where carries propagate through each bit position, Wallace trees use parallel stages where each layer independently reduces the number of operands. Each reduction stage processes groups of inputs using carry-save adders, outputting fewer partial results. This process repeats across multiple layers until only two values remain, which can then be added with a final carry-propagate adder.
@@ -12,33 +8,29 @@ The key advantage is depth: reduction happens in logarithmic stages rather than 
 
 Your Task
 
-Replace the NV_DW02_tree instances in the CMAC multiplier with structural Wallace tree implementations. Study the NVDLA source code to understand how the multiplier works, identify where NV_DW02_tree modules are used, and analyze their interfaces and data flow patterns across the three operating modes (INT8, INT16, FP16).
+Replace the NV_DW02_tree instances in the CMAC multiplier with structural Wallace tree implementations.
 
 Requirements
 
 Your implementation must:
   - Produce functionally equivalent outputs to the original NV_DW02_tree
-  - Support all three operating modes (INT8, INT16, FP16)
-  - Use structural instantiations (no behavioral loops in the Wallace tree)
+  - Use structural instantiations (no behavioral loops)
   - Maintain the same multiplier interface (no new external ports)
-  - Replace all NV_DW02_tree instances completely
 
-Required Building Blocks
+Required Modules
 
-Your Wallace tree will need basic carry-save adder components. Implement these as separate modules with the exact interfaces specified below. Place all your Verilog files in the sources/vmod/nvdla/cmac/ directory.
+Implement these modules with the exact interfaces specified below. Place all your Verilog files in the sources/vmod/nvdla/cmac/ directory.
 
   Module: NV_NVDLA_CMAC_CORE_csa32
-    A 3-to-2 compressor (full adder array) that reduces three inputs to sum and carry.
     Parameter: WIDTH
     Inputs:  in0[WIDTH-1:0], in1[WIDTH-1:0], in2[WIDTH-1:0]
     Outputs: sum[WIDTH-1:0], carry[WIDTH-1:0]
 
   Module: NV_NVDLA_CMAC_CORE_csa42
-    A 4-to-2 compressor that reduces four inputs plus carry-in to three outputs.
     Parameter: WIDTH
     Inputs:  in0[WIDTH-1:0], in1[WIDTH-1:0], in2[WIDTH-1:0], in3[WIDTH-1:0], cin[WIDTH-1:0]
     Outputs: sum[WIDTH-1:0], carry[WIDTH-1:0], cout[WIDTH-1:0]
 
-These exact module names and port names are required for testing. Your implementation will be validated by instantiating modules with these exact names and connecting to these exact port names.
+These exact module names and port names are required for testing.
 
 The complete NVDLA source code is provided for context.
