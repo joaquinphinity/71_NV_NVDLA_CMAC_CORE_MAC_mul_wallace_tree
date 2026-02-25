@@ -1662,7 +1662,7 @@ def test_session1_csa32_component():
     cmac_dir = proj_path / "sources/vmod/nvdla/cmac"
     vlibs_dir = proj_path / "sources/vmod/vlibs"
     
-    all_sources = [proj_path / "tests/timescale.v"]
+    all_sources = [proj_path / "sources/verif/sim_vivado/timescale.v"]
     all_sources += sorted(cmac_dir.glob("*.v"))
     all_sources += sorted(vlibs_dir.glob("*.v"))
     
@@ -1696,7 +1696,7 @@ def test_session2_csa42_component():
     cmac_dir = proj_path / "sources/vmod/nvdla/cmac"
     vlibs_dir = proj_path / "sources/vmod/vlibs"
     
-    all_sources = [proj_path / "tests/timescale.v"]
+    all_sources = [proj_path / "sources/verif/sim_vivado/timescale.v"]
     all_sources += sorted(cmac_dir.glob("*.v"))
     all_sources += sorted(vlibs_dir.glob("*.v"))
     
@@ -1730,7 +1730,7 @@ def test_session3_multiplier_integration():
     cmac_dir = proj_path / "sources/vmod/nvdla/cmac"
     vlibs_dir = proj_path / "sources/vmod/vlibs"
     
-    all_sources = [proj_path / "tests/timescale.v"]
+    all_sources = [proj_path / "sources/verif/sim_vivado/timescale.v"]
     all_sources += sorted(cmac_dir.glob("*.v"))
     all_sources += sorted(vlibs_dir.glob("*.v"))
     
