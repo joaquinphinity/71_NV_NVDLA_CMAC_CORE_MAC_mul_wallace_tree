@@ -1,1 +1,0 @@
-Hint 1: Explore the existing multiplier source before writing anything. The NV_DW02_tree module is an open-source simulation model — read it to understand the expected interface (inputs, outputs, parameterization) so your replacement module is compatible.
