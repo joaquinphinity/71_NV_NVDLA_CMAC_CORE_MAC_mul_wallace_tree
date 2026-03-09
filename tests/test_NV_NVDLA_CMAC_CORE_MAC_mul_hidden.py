@@ -1510,6 +1510,7 @@ async def test_csa32_00_structural_check(dut):
     )
 
 
+@cocotb.test(timeout_time=500, timeout_unit="ms")
 async def test_csa32_zeros(dut):
     """CSA32 Test 1: All zeros input."""
     dut.in0.value = 0
