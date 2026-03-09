@@ -1017,7 +1017,7 @@ async def test_17_performance_documentation(dut):
     await reset_and_config_int16(dut)
     
     dut._log.info("=== Wallace Tree Performance Characteristics ===")
-    dut._log.info("")
+    dut._log.info(" ")
     dut._log.info("Topology:")
     dut._log.info("  Level 0 (5→2): 3-level CSA32 cascade")
     dut._log.info("    - CSA32: pp[0:2] → sum0, carry0")
@@ -1026,18 +1026,18 @@ async def test_17_performance_documentation(dut):
     dut._log.info("  Level 1 (4→2): 2-level CSA32 cascade")
     dut._log.info("    - CSA32: in[0:2] → sum0, carry0")
     dut._log.info("    - CSA32: sum0, carry0, in[3] → OUT0, OUT1")
-    dut._log.info("")
+    dut._log.info(" ")
     dut._log.info("Critical Path:")
     dut._log.info("  Wallace Tree: 3 FA delays (Level 0) + 2 FA delays (Level 1) = 5 FA delays")
     dut._log.info("  NV_DW02_tree: Variable (iterative), typically 5-6 FA delays")
     dut._log.info("  Improvement: 10-15% faster worst-case path")
-    dut._log.info("")
+    dut._log.info(" ")
     dut._log.info("Synthesis Benefits:")
     dut._log.info("  ✓ Structural RTL (explicit CSA instances)")
     dut._log.info("  ✓ Fixed topology (predictable timing)")
     dut._log.info("  ✓ Tool-friendly (no behavioral loops to unroll)")
     dut._log.info("  ✓ Optimized for specific input counts (5, 4)")
-    dut._log.info("")
+    dut._log.info(" ")
     dut._log.info("==============================================")
     
     # Run a simple test to verify it works
@@ -1378,16 +1378,16 @@ async def test_23_carry_save_delay_advantage(dut):
     await reset_and_config_int16(dut)
     
     dut._log.info("=== Carry-Save vs. Carry-Propagate Property ===")
-    dut._log.info("")
+    dut._log.info(" ")
     dut._log.info("Wallace Tree Output Format:")
     dut._log.info("  res_a, res_b = TWO PARTIAL SUMS (carry-save format)")
     dut._log.info("  Final product = res_a + res_b (done in CACC stage)")
-    dut._log.info("")
+    dut._log.info(" ")
     dut._log.info("Advantage:")
     dut._log.info("  - Wallace tree: O(log N) levels of CSA (no ripple)")
     dut._log.info("  - Final CPA: Single ripple-carry addition in CACC")
     dut._log.info("  - vs. Ripple-carry tree: O(N) ripple delay per level")
-    dut._log.info("")
+    dut._log.info(" ")
     
     # Functional verification
     dut.op_a_dat.value = 12345
@@ -1405,7 +1405,7 @@ async def test_23_carry_save_delay_advantage(dut):
     dut._log.info(f"Example: 12345 × 6789")
     dut._log.info(f"  Wallace outputs: res_a=0x{res_a:08x}, res_b=0x{res_b:08x}")
     dut._log.info(f"  (Final product computed in CACC: res_a + res_b)")
-    dut._log.info("")
+    dut._log.info(" ")
     dut._log.info("==============================================")
     
     dut._log.info("Test 23: Carry-save delay advantage documented PASSED")
