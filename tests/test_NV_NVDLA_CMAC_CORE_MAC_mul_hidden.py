@@ -1474,6 +1474,42 @@ async def test_24_booth_boundary_handling(dut):
 # =============================================================================
 
 @cocotb.test(timeout_time=500, timeout_unit="ms")
+async def test_csa32_00_structural_check(dut):
+    """CSA32 Test 0 (structural): NV_DW02_tree must be replaced in mul.v.
+
+    This runs inside Session 1 (DUT=csa32) as a cocotb test so the grader
+    can see its pass/fail result. It reads NV_NVDLA_CMAC_CORE_MAC_mul.v
+    from the filesystem and asserts that no NV_DW02_tree instantiation
+    remains. The DUT is not used — this is a file-system check only.
+
+    Agents who only created csa32.v/csa42.v without modifying mul.v will
+    fail here, correctly scoring 0.0 for the whole run.
+    """
+    import re
+    from pathlib import Path as _Path
+
+    mul_file = _Path(__file__).resolve().parent.parent / \
+        "sources/vmod/nvdla/cmac/NV_NVDLA_CMAC_CORE_MAC_mul.v"
+
+    assert mul_file.exists(), \
+        f"NV_NVDLA_CMAC_CORE_MAC_mul.v not found at expected path: {mul_file}"
+
+    content = mul_file.read_text()
+    # Strip single-line comments
+    stripped = re.sub(r'//.*$', '', content, flags=re.MULTILINE)
+    # Strip block comments
+    stripped = re.sub(r'/\*.*?\*/', '', stripped, flags=re.DOTALL)
+
+    assert 'NV_DW02_tree' not in stripped, (
+        "STRUCTURAL CHECK FAILED: NV_DW02_tree is still instantiated in "
+        "NV_NVDLA_CMAC_CORE_MAC_mul.v. You must replace all NV_DW02_tree "
+        "instantiations with your own Wallace tree modules placed in "
+        "sources/vmod/nvdla/cmac/ (e.g. NV_NVDLA_CMAC_CORE_wallace_5to2.v, "
+        "NV_NVDLA_CMAC_CORE_wallace_4to2.v) and update mul.v to instantiate "
+        "them instead."
+    )
+
+
 async def test_csa32_zeros(dut):
     """CSA32 Test 1: All zeros input."""
     dut.in0.value = 0
@@ -1649,41 +1685,6 @@ async def test_csa42_random(dut):
 # Baseline: 1/3 pass (33%), Golden: 3/3 pass (100%)
 # Cocotb logs show all 29 individual test details
 # =============================================================================
-
-def test_session0_structural_check():
-    """
-    Structural prerequisite: NV_DW02_tree must be replaced in mul.v.
-
-    Reads NV_NVDLA_CMAC_CORE_MAC_mul.v and asserts that no instantiation of
-    NV_DW02_tree remains. Agents must create separate Wallace tree modules
-    (e.g. NV_NVDLA_CMAC_CORE_wallace_5to2, NV_NVDLA_CMAC_CORE_wallace_4to2)
-    and modify mul.v to use them instead.
-
-    FAILS immediately if the agent left NV_DW02_tree instantiation(s) in mul.v,
-    ensuring Sessions 1/2/3 cannot inflate the score for incomplete submissions.
-    """
-    import re
-    proj_path = Path(__file__).resolve().parent.parent
-    mul_file = proj_path / "sources/vmod/nvdla/cmac/NV_NVDLA_CMAC_CORE_MAC_mul.v"
-
-    assert mul_file.exists(), f"mul.v not found at {mul_file}"
-
-    content = mul_file.read_text()
-
-    # Strip single-line comments
-    content_stripped = re.sub(r'//.*$', '', content, flags=re.MULTILINE)
-    # Strip block comments
-    content_stripped = re.sub(r'/\*.*?\*/', '', content_stripped, flags=re.DOTALL)
-
-    assert 'NV_DW02_tree' not in content_stripped, (
-        "NV_DW02_tree is still instantiated in NV_NVDLA_CMAC_CORE_MAC_mul.v. "
-        "You must replace all NV_DW02_tree instantiations with your own Wallace "
-        "tree modules (e.g. NV_NVDLA_CMAC_CORE_wallace_5to2, "
-        "NV_NVDLA_CMAC_CORE_wallace_4to2) placed in sources/vmod/nvdla/cmac/."
-    )
-
-    print("\n[STRUCTURAL CHECK] NV_DW02_tree has been removed from mul.v - PASS")
-
 
 def test_session1_csa32_component():
     """
