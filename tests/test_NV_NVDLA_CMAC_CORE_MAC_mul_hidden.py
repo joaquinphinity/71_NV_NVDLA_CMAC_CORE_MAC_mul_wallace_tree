@@ -865,6 +865,32 @@ async def reset_and_config_int16(dut):
     await RisingEdge(dut.nvdla_core_clk)
 
 
+async def reset_and_config_int8(dut):
+    """Helper: Reset and configure INT8 dual-lane mode."""
+    dut.nvdla_core_rstn.value = 0
+    dut.cfg_reg_en.value = 0
+    dut.cfg_is_int8.value = 0
+    dut.cfg_is_fp16.value = 0
+    dut.op_a_dat.value = 0
+    dut.op_b_dat.value = 0
+    dut.op_a_pvld.value = 0
+    dut.op_b_pvld.value = 0
+    dut.op_a_nz.value = 0
+    dut.op_b_nz.value = 0
+    dut.exp_sft.value = 0
+
+    await RisingEdge(dut.nvdla_core_clk)
+    dut.nvdla_core_rstn.value = 1
+    await RisingEdge(dut.nvdla_core_clk)
+
+    dut.cfg_reg_en.value = 1
+    dut.cfg_is_int8.value = 1
+    dut.cfg_is_fp16.value = 0
+    await RisingEdge(dut.nvdla_core_clk)
+    dut.cfg_reg_en.value = 0
+    await RisingEdge(dut.nvdla_core_clk)
+
+
 #==============================================================================
 # Test 13: Structural Verification - Wallace Tree Hierarchy
 #==============================================================================
@@ -1466,6 +1492,151 @@ async def test_24_booth_boundary_handling(dut):
     dut._log.info("Test 24: Booth boundary handling PASSED")
 
 
+#==============================================================================
+# Test 25: Carry-Save Format Equivalence (INT16)
+#==============================================================================
+
+@cocotb.test(timeout_time=1000, timeout_unit="ms")
+async def test_25_carry_save_format_int16(dut):
+    """
+    Test 25: res_a and res_b individually must match the NV_DW02_tree reference.
+
+    The task requires a Wallace tree that is bit-identical to the original
+    NV_DW02_tree implementation, including the carry-save split (not just the
+    arithmetic sum). These reference values were computed from the original
+    NV_DW02_tree behavioral model and must match exactly.
+
+    A correct 3-level CSA32 cascade matching NV_DW02_tree's greedy reduction
+    order will pass. Implementations using a different reduction order (even if
+    arithmetically correct) produce a different carry-save split and will fail.
+    """
+    clock = Clock(dut.nvdla_core_clk, 10, unit="ns")
+    cocotb.start_soon(clock.start())
+    await reset_dut(dut)
+
+    # Reference values from NV_DW02_tree behavioral model (baseline mul.v).
+    # Golden Wallace tree produces identical values confirming bit-exact equivalence.
+    # Protocol: cfg_reg_en=1 held throughout (combinational read within same cycle).
+    INT16_REFS = [
+        (0x0005, 0x0007, 0x55550023, 0x00000000),
+        (0x7FFF, 0x0001, 0x55557FFF, 0x00000000),
+        (0x1234, 0x5678, 0x5A72F860, 0x01080800),
+        (0x4000, 0x4000, 0x65550000, 0x00000000),
+        (0xFFFF, 0x0001, 0x5554FFFF, 0x00000000),
+        (0xFFFE, 0xFFFE, 0x55550004, 0x00000000),
+        (0x5555, 0xAAAA, 0x349A9C72, 0x04488000),
+        (0x3333, 0xCCCC, 0x4A8660A4, 0x00911000),
+    ]
+
+    errors = 0
+    for op_a, op_b, exp_ra, exp_rb in INT16_REFS:
+        # Set config+inputs, await rising edge (registers cfg_is_int8_d1=0),
+        # then 3ns combinational settle, then read.
+        dut.cfg_reg_en.value = 1
+        dut.cfg_is_int8.value = 0
+        dut.cfg_is_fp16.value = 0
+        dut.op_a_dat.value = op_a
+        dut.op_b_dat.value = op_b
+        dut.op_a_pvld.value = 1
+        dut.op_b_pvld.value = 1
+        dut.op_a_nz.value = 3
+        dut.op_b_nz.value = 3
+        await RisingEdge(dut.nvdla_core_clk)
+        await Timer(3, unit="ns")
+        act_ra = int(dut.res_a.value) & 0xFFFFFFFF
+        act_rb = int(dut.res_b.value) & 0xFFFFFFFF
+        if act_ra != exp_ra or act_rb != exp_rb:
+            errors += 1
+            dut._log.info(
+                f"FAIL (0x{op_a:04X}×0x{op_b:04X}): "
+                f"res_a expected=0x{exp_ra:08X} got=0x{act_ra:08X}, "
+                f"res_b expected=0x{exp_rb:08X} got=0x{act_rb:08X}"
+            )
+
+    assert errors == 0, (
+        f"Carry-save format mismatch for {errors}/8 INT16 cases. "
+        f"res_a and res_b must be bit-identical to the NV_DW02_tree reference. "
+        f"The Wallace tree must use the same 3-level greedy reduction order as "
+        f"NV_DW02_tree: Level0=CSA(pp[0:2]), Level1=CSA(s0,c0,pp[3]), "
+        f"Level2=CSA(s1,c1,pp[4]). A different reduction order produces the "
+        f"same arithmetic sum but a different (res_a, res_b) split."
+    )
+    dut._log.info("Test 25: Carry-save format equivalence (INT16, 8 vectors) PASSED")
+
+
+#==============================================================================
+# Test 26: Carry-Save Format Equivalence (INT8 dual-lane)
+#==============================================================================
+
+@cocotb.test(timeout_time=1000, timeout_unit="ms")
+async def test_26_carry_save_format_int8(dut):
+    """
+    Test 26: In INT8 dual-lane mode, res_a and res_b must individually match
+    the NV_DW02_tree reference for both lanes simultaneously.
+
+    INT8 mode uses TWO independent Level-0 5:2 trees (one per byte lane).
+    The reference values encode the exact carry-save split from two separate
+    NV_DW02_tree reductions. An implementation that:
+      - Cross-contaminates lanes at the carry-save level
+      - Uses a single combined tree for both lanes
+      - Uses incorrect Level-1 bypass logic for INT8
+    will produce different (res_a, res_b) values and fail this test.
+    """
+    clock = Clock(dut.nvdla_core_clk, 10, unit="ns")
+    cocotb.start_soon(clock.start())
+    await reset_dut(dut)
+
+    # Reference values from NV_DW02_tree baseline in INT8 mode.
+    # op_a: [15:8]=upper_lane_a, [7:0]=lower_lane_a
+    # op_b: [15:8]=upper_lane_b, [7:0]=lower_lane_b
+    # Protocol: set signals -> await RisingEdge (registers cfg_is_int8_d1=1)
+    #           -> 3ns settle -> read.
+    INT8_REFS = [
+        (0x0703, 0x0502, 0x542354C6, 0x01000040),
+        (0x1F01, 0x0F7F, 0x56D1557F, 0x00000000),
+        (0x0A7F, 0x037F, 0x509E4201, 0x04805200),
+        (0xFF01, 0x0101, 0x54FF5501, 0x00000000),
+        (0x1010, 0x0F0F, 0x55F055F0, 0x00000000),
+        (0x7F7F, 0x7F7F, 0x42014201, 0x52005200),
+    ]
+
+    errors = 0
+    for op_a, op_b, exp_ra, exp_rb in INT8_REFS:
+        # Set signals, await rising edge (registers cfg_is_int8_d1=1),
+        # then 3ns combinational settle, then read.
+        dut.cfg_reg_en.value = 1
+        dut.cfg_is_int8.value = 1
+        dut.cfg_is_fp16.value = 0
+        dut.op_a_dat.value = op_a
+        dut.op_b_dat.value = op_b
+        dut.op_a_pvld.value = 1
+        dut.op_b_pvld.value = 1
+        dut.op_a_nz.value = 3
+        dut.op_b_nz.value = 3
+        await RisingEdge(dut.nvdla_core_clk)
+        await Timer(3, unit="ns")
+        act_ra = int(dut.res_a.value) & 0xFFFFFFFF
+        act_rb = int(dut.res_b.value) & 0xFFFFFFFF
+        if act_ra != exp_ra or act_rb != exp_rb:
+            errors += 1
+            a_lo = op_a & 0xFF; a_hi = (op_a >> 8) & 0xFF
+            b_lo = op_b & 0xFF; b_hi = (op_b >> 8) & 0xFF
+            dut._log.info(
+                f"FAIL lanes lo={a_lo}×{b_lo} hi={a_hi}×{b_hi}: "
+                f"res_a expected=0x{exp_ra:08X} got=0x{act_ra:08X}, "
+                f"res_b expected=0x{exp_rb:08X} got=0x{act_rb:08X}"
+            )
+
+    assert errors == 0, (
+        f"INT8 carry-save format mismatch for {errors}/6 cases. "
+        f"res_a and res_b must match the NV_DW02_tree reference for both "
+        f"byte lanes. The two independent Level-0 trees must each use the "
+        f"same reduction order as NV_DW02_tree, and the Level-1 bypass must "
+        f"be correctly applied for INT8 mode."
+    )
+    dut._log.info("Test 26: Carry-save format equivalence (INT8, 6 vectors) PASSED")
+
+
 # =============================================================================
 
 
@@ -1810,226 +1981,9 @@ def test_session2_csa42_component():
         testcase="test_csa42_.*"
     )
 
-# =============================================================================
-# Helper: Python model of the 3-level CSA32 cascade (wallace_5to2 reference)
-# =============================================================================
-
-def _csa32_model(in0, in1, in2, width):
-    """Pure Python simulation of one CSA32 stage."""
-    mask = (1 << width) - 1
-    s = (in0 ^ in1 ^ in2) & mask
-    c = (((in0 & in1) | (in0 & in2) | (in1 & in2)) << 1) & mask
-    return s, c
-
-
-def _wallace5to2_model(pp, width=24):
+def test_session3_multiplier_integration():
     """
-    Python reference for NV_NVDLA_CMAC_CORE_wallace_5to2.
-    Three-level CSA32 cascade matching the specified reduction order:
-      Level 0: CSA32(pp[0], pp[1], pp[2]) -> (s0, c0)
-      Level 1: CSA32(s0,    c0,    pp[3]) -> (s1, c1)
-      Level 2: CSA32(s1,    c1,    pp[4]) -> (OUT0, OUT1)
-    """
-    s0, c0 = _csa32_model(pp[0], pp[1], pp[2], width)
-    s1, c1 = _csa32_model(s0,    c0,    pp[3], width)
-    out0, out1 = _csa32_model(s1, c1,   pp[4], width)
-    return out0, out1
-
-
-def _pack_input(pp, width=24):
-    """Pack 5 partial products into concatenated INPUT bus (pp[i] at bit i*width)."""
-    result = 0
-    for i, v in enumerate(pp):
-        result |= (v & ((1 << width) - 1)) << (i * width)
-    return result
-
-
-# =============================================================================
-# Wallace 5:2 Tree Tests (Session 3)
-# =============================================================================
-
-@cocotb.test(timeout_time=1000, timeout_unit="ms")
-async def test_w5_00_arithmetic(dut):
-    """
-    Wallace5 Test 0: OUT0 + OUT1 must equal sum of all five inputs.
-    Tests 60 cases: zeros, all-ones, alternating patterns, random vectors.
-    """
-    WIDTH = 24
-    mask = (1 << WIDTH) - 1
-
-    test_cases = [
-        ([0]*5,                                   "all zeros"),
-        ([mask]*5,                                "all ones"),
-        ([1, 2, 4, 8, 16],                        "powers of two"),
-        ([0xAAAAAA, 0x555555, 0xAAAAAA, 0x555555, 0xAAAAAA], "alternating"),
-        ([0x800000, 0x800000, 0x800000, 0x800000, 0x800000], "MSB set"),
-        ([0x7FFFFF, 0x7FFFFF, 0x7FFFFF, 0x7FFFFF, 0x7FFFFF], "max positive"),
-        ([1, 0, 0, 0, 0],                         "single one"),
-        ([0, mask, 0, mask, 0],                   "alternating zero/ones"),
-    ]
-
-    random.seed(71)
-    for _ in range(52):
-        test_cases.append(([random.randint(0, mask) for _ in range(5)], "random"))
-
-    errors = 0
-    for pp, desc in test_cases:
-        dut.INPUT.value = _pack_input(pp, WIDTH)
-        await Timer(1, unit="ns")
-        out0 = int(dut.OUT0.value) & mask
-        out1 = int(dut.OUT1.value) & mask
-        # Carry-save is WIDTH-bit: compare modulo 2^WIDTH (correct for multiplier use)
-        actual_sum = (out0 + out1) & mask
-        expected_sum = sum(pp) & mask
-        if actual_sum != expected_sum:
-            errors += 1
-            if errors <= 3:
-                dut._log.info(
-                    f"FAIL [{desc}]: pp={[f'{p:06x}' for p in pp]} "
-                    f"OUT0={out0:06x} OUT1={out1:06x} "
-                    f"got sum(mod 2^24)={actual_sum:06x} expected={expected_sum:06x}"
-                )
-
-    assert errors == 0, (
-        f"Wallace5 arithmetic failed for {errors}/60 cases. "
-        f"(OUT0 + OUT1) mod 2^WIDTH must equal (pp[0]+...+pp[4]) mod 2^WIDTH."
-    )
-    dut._log.info("Wallace5 Test 0: Arithmetic correctness (60 vectors) PASSED")
-
-
-@cocotb.test(timeout_time=500, timeout_unit="ms")
-async def test_w5_01_carry_shift(dut):
-    """
-    Wallace5 Test 1: OUT1[0] (LSB of carry output) must always be zero.
-    The carry output is produced by CSA32 which shifts majority left by 1,
-    so bit 0 is always 0. Verifies carry-shift convention propagates correctly
-    through all three CSA32 levels.
-    """
-    WIDTH = 24
-    mask = (1 << WIDTH) - 1
-
-    random.seed(1729)
-    errors = 0
-    for _ in range(40):
-        pp = [random.randint(0, mask) for _ in range(5)]
-        dut.INPUT.value = _pack_input(pp, WIDTH)
-        await Timer(1, unit="ns")
-        out1 = int(dut.OUT1.value) & mask
-        if out1 & 1:
-            errors += 1
-            dut._log.info(
-                f"FAIL: pp={[f'{p:06x}' for p in pp]} OUT1={out1:06x} LSB={out1&1}"
-            )
-
-    assert errors == 0, (
-        f"OUT1 (carry) LSB is non-zero for {errors}/40 cases. "
-        f"The final CSA32 stage produces carry = majority(...) << 1, so OUT1[0] must always be 0. "
-        f"Check that all three CSA32 instances correctly shift carry output left by 1."
-    )
-    dut._log.info("Wallace5 Test 1: Carry-shift property (40 vectors) PASSED")
-
-
-@cocotb.test(timeout_time=1000, timeout_unit="ms")
-async def test_w5_02_topology(dut):
-    """
-    Wallace5 Test 2: OUT0 and OUT1 must individually match the exact 3-level
-    CSA32 cascade topology.
-
-    The required reduction order is:
-      Level 0: CSA32(pp[0], pp[1], pp[2]) -> (s0, c0)
-      Level 1: CSA32(s0,    c0,    pp[3]) -> (s1, c1)
-      Level 2: CSA32(s1,    c1,    pp[4]) -> (OUT0, OUT1)
-
-    Any different reduction order (e.g. grouping pp[3],pp[4] in level 0,
-    or using behavioral loops) produces different (OUT0, OUT1) bit patterns
-    and fails this test.
-    """
-    WIDTH = 24
-    mask = (1 << WIDTH) - 1
-
-    # Fixed test cases chosen to maximize carry propagation through all 3 levels
-    fixed_cases = [
-        [0xFFFFFF, 0xFFFFFF, 0xFFFFFF, 0xFFFFFF, 0xFFFFFF],
-        [0xAAAAAA, 0x555555, 0xFFFFFF, 0x123456, 0xABCDEF],
-        [0x800000, 0x400000, 0x200000, 0x100000, 0x080000],
-        [0xF0F0F0, 0x0F0F0F, 0xF0F0F0, 0x0F0F0F, 0x123456],
-        [0xFFFFFF, 0x000000, 0xFFFFFF, 0x000000, 0xFFFFFF],
-        [0x555555, 0x555555, 0x555555, 0x555555, 0x555555],
-        [0xAAAAAA, 0xAAAAAA, 0xAAAAAA, 0xAAAAAA, 0xAAAAAA],
-        [0x123456, 0x789ABC, 0xDEF012, 0x345678, 0x9ABCDE],
-    ]
-
-    random.seed(2025)
-    rand_cases = [[random.randint(0, mask) for _ in range(5)] for _ in range(22)]
-    all_cases = fixed_cases + rand_cases
-
-    errors = 0
-    for pp in all_cases:
-        exp_out0, exp_out1 = _wallace5to2_model(pp, WIDTH)
-        dut.INPUT.value = _pack_input(pp, WIDTH)
-        await Timer(1, unit="ns")
-        act_out0 = int(dut.OUT0.value) & mask
-        act_out1 = int(dut.OUT1.value) & mask
-        if act_out0 != exp_out0 or act_out1 != exp_out1:
-            errors += 1
-            if errors <= 3:
-                dut._log.info(
-                    f"FAIL: pp={[f'{p:06x}' for p in pp]}"
-                )
-                dut._log.info(
-                    f"  Expected OUT0={exp_out0:06x} OUT1={exp_out1:06x}"
-                )
-                dut._log.info(
-                    f"  Got     OUT0={act_out0:06x} OUT1={act_out1:06x}"
-                )
-
-    assert errors == 0, (
-        f"Wallace5 topology mismatch for {errors}/30 cases. "
-        f"The required topology is a strict 3-level CSA32 cascade: "
-        f"Level0=CSA32(pp[0:2]), Level1=CSA32(s0,c0,pp[3]), Level2=CSA32(s1,c1,pp[4]). "
-        f"Different reduction orders or behavioral implementations produce different bit patterns."
-    )
-    dut._log.info("Wallace5 Test 2: Exact topology match (30 vectors) PASSED")
-
-
-def test_session3_wallace5to2_component():
-    """
-    Session 3: Wallace 5:2 Tree Tests (3 tests).
-    Imports ALL .v files from cmac/ and vlibs/ so file naming is irrelevant.
-    FAILS if module NV_NVDLA_CMAC_CORE_wallace_5to2 is not defined in any source file.
-    """
-    sim = os.getenv("SIM", "icarus")
-    proj_path = Path(__file__).resolve().parent.parent
-
-    cmac_dir = proj_path / "sources/vmod/nvdla/cmac"
-    vlibs_dir = proj_path / "sources/vmod/vlibs"
-
-    all_sources = [proj_path / "sources/verif/sim_vivado/timescale.v"]
-    all_sources += sorted(cmac_dir.glob("*.v"))
-    all_sources += sorted(vlibs_dir.glob("*.v"))
-
-    print(f"\n{'='*70}")
-    print(f"SESSION 3: Wallace 5:2 Tree Tests")
-    print(f"Source files: {len(all_sources)} total")
-    print(f"{'='*70}")
-
-    runner = get_runner(sim)
-    runner.build(
-        sources=all_sources,
-        hdl_toplevel="NV_NVDLA_CMAC_CORE_wallace_5to2",
-        always=True,
-        parameters={"num_inputs": "5", "input_width": "24"}
-    )
-    runner.test(
-        hdl_toplevel="NV_NVDLA_CMAC_CORE_wallace_5to2",
-        test_module="test_NV_NVDLA_CMAC_CORE_MAC_mul_hidden",
-        testcase="test_w5_.*"
-    )
-
-
-def test_session4_multiplier_integration():
-    """
-    Session 4: Multiplier Integration Tests (21 tests).
+    Session 3: Multiplier Integration Tests (21 tests).
     Tests full NV_NVDLA_CMAC_CORE_MAC_mul module.
     Imports ALL .v files from cmac/ and vlibs/ so any agent-created files are included.
     """
@@ -2044,7 +1998,7 @@ def test_session4_multiplier_integration():
     all_sources += sorted(vlibs_dir.glob("*.v"))
     
     print(f"\n{'='*70}")
-    print("SESSION 4: Multiplier Integration Tests")
+    print("SESSION 3: Multiplier Integration Tests")
     print(f"Source files: {len(all_sources)} total")
     print(f"{'='*70}")
     
