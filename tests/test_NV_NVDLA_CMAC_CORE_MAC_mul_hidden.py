@@ -1810,9 +1810,226 @@ def test_session2_csa42_component():
         testcase="test_csa42_.*"
     )
 
-def test_session3_multiplier_integration():
+# =============================================================================
+# Helper: Python model of the 3-level CSA32 cascade (wallace_5to2 reference)
+# =============================================================================
+
+def _csa32_model(in0, in1, in2, width):
+    """Pure Python simulation of one CSA32 stage."""
+    mask = (1 << width) - 1
+    s = (in0 ^ in1 ^ in2) & mask
+    c = (((in0 & in1) | (in0 & in2) | (in1 & in2)) << 1) & mask
+    return s, c
+
+
+def _wallace5to2_model(pp, width=24):
     """
-    Session 3: Multiplier Integration Tests (21 tests).
+    Python reference for NV_NVDLA_CMAC_CORE_wallace_5to2.
+    Three-level CSA32 cascade matching the specified reduction order:
+      Level 0: CSA32(pp[0], pp[1], pp[2]) -> (s0, c0)
+      Level 1: CSA32(s0,    c0,    pp[3]) -> (s1, c1)
+      Level 2: CSA32(s1,    c1,    pp[4]) -> (OUT0, OUT1)
+    """
+    s0, c0 = _csa32_model(pp[0], pp[1], pp[2], width)
+    s1, c1 = _csa32_model(s0,    c0,    pp[3], width)
+    out0, out1 = _csa32_model(s1, c1,   pp[4], width)
+    return out0, out1
+
+
+def _pack_input(pp, width=24):
+    """Pack 5 partial products into concatenated INPUT bus (pp[i] at bit i*width)."""
+    result = 0
+    for i, v in enumerate(pp):
+        result |= (v & ((1 << width) - 1)) << (i * width)
+    return result
+
+
+# =============================================================================
+# Wallace 5:2 Tree Tests (Session 3)
+# =============================================================================
+
+@cocotb.test(timeout_time=1000, timeout_unit="ms")
+async def test_w5_00_arithmetic(dut):
+    """
+    Wallace5 Test 0: OUT0 + OUT1 must equal sum of all five inputs.
+    Tests 60 cases: zeros, all-ones, alternating patterns, random vectors.
+    """
+    WIDTH = 24
+    mask = (1 << WIDTH) - 1
+
+    test_cases = [
+        ([0]*5,                                   "all zeros"),
+        ([mask]*5,                                "all ones"),
+        ([1, 2, 4, 8, 16],                        "powers of two"),
+        ([0xAAAAAA, 0x555555, 0xAAAAAA, 0x555555, 0xAAAAAA], "alternating"),
+        ([0x800000, 0x800000, 0x800000, 0x800000, 0x800000], "MSB set"),
+        ([0x7FFFFF, 0x7FFFFF, 0x7FFFFF, 0x7FFFFF, 0x7FFFFF], "max positive"),
+        ([1, 0, 0, 0, 0],                         "single one"),
+        ([0, mask, 0, mask, 0],                   "alternating zero/ones"),
+    ]
+
+    random.seed(71)
+    for _ in range(52):
+        test_cases.append(([random.randint(0, mask) for _ in range(5)], "random"))
+
+    errors = 0
+    for pp, desc in test_cases:
+        dut.INPUT.value = _pack_input(pp, WIDTH)
+        await Timer(1, unit="ns")
+        out0 = int(dut.OUT0.value) & mask
+        out1 = int(dut.OUT1.value) & mask
+        # Carry-save is WIDTH-bit: compare modulo 2^WIDTH (correct for multiplier use)
+        actual_sum = (out0 + out1) & mask
+        expected_sum = sum(pp) & mask
+        if actual_sum != expected_sum:
+            errors += 1
+            if errors <= 3:
+                dut._log.info(
+                    f"FAIL [{desc}]: pp={[f'{p:06x}' for p in pp]} "
+                    f"OUT0={out0:06x} OUT1={out1:06x} "
+                    f"got sum(mod 2^24)={actual_sum:06x} expected={expected_sum:06x}"
+                )
+
+    assert errors == 0, (
+        f"Wallace5 arithmetic failed for {errors}/60 cases. "
+        f"(OUT0 + OUT1) mod 2^WIDTH must equal (pp[0]+...+pp[4]) mod 2^WIDTH."
+    )
+    dut._log.info("Wallace5 Test 0: Arithmetic correctness (60 vectors) PASSED")
+
+
+@cocotb.test(timeout_time=500, timeout_unit="ms")
+async def test_w5_01_carry_shift(dut):
+    """
+    Wallace5 Test 1: OUT1[0] (LSB of carry output) must always be zero.
+    The carry output is produced by CSA32 which shifts majority left by 1,
+    so bit 0 is always 0. Verifies carry-shift convention propagates correctly
+    through all three CSA32 levels.
+    """
+    WIDTH = 24
+    mask = (1 << WIDTH) - 1
+
+    random.seed(1729)
+    errors = 0
+    for _ in range(40):
+        pp = [random.randint(0, mask) for _ in range(5)]
+        dut.INPUT.value = _pack_input(pp, WIDTH)
+        await Timer(1, unit="ns")
+        out1 = int(dut.OUT1.value) & mask
+        if out1 & 1:
+            errors += 1
+            dut._log.info(
+                f"FAIL: pp={[f'{p:06x}' for p in pp]} OUT1={out1:06x} LSB={out1&1}"
+            )
+
+    assert errors == 0, (
+        f"OUT1 (carry) LSB is non-zero for {errors}/40 cases. "
+        f"The final CSA32 stage produces carry = majority(...) << 1, so OUT1[0] must always be 0. "
+        f"Check that all three CSA32 instances correctly shift carry output left by 1."
+    )
+    dut._log.info("Wallace5 Test 1: Carry-shift property (40 vectors) PASSED")
+
+
+@cocotb.test(timeout_time=1000, timeout_unit="ms")
+async def test_w5_02_topology(dut):
+    """
+    Wallace5 Test 2: OUT0 and OUT1 must individually match the exact 3-level
+    CSA32 cascade topology.
+
+    The required reduction order is:
+      Level 0: CSA32(pp[0], pp[1], pp[2]) -> (s0, c0)
+      Level 1: CSA32(s0,    c0,    pp[3]) -> (s1, c1)
+      Level 2: CSA32(s1,    c1,    pp[4]) -> (OUT0, OUT1)
+
+    Any different reduction order (e.g. grouping pp[3],pp[4] in level 0,
+    or using behavioral loops) produces different (OUT0, OUT1) bit patterns
+    and fails this test.
+    """
+    WIDTH = 24
+    mask = (1 << WIDTH) - 1
+
+    # Fixed test cases chosen to maximize carry propagation through all 3 levels
+    fixed_cases = [
+        [0xFFFFFF, 0xFFFFFF, 0xFFFFFF, 0xFFFFFF, 0xFFFFFF],
+        [0xAAAAAA, 0x555555, 0xFFFFFF, 0x123456, 0xABCDEF],
+        [0x800000, 0x400000, 0x200000, 0x100000, 0x080000],
+        [0xF0F0F0, 0x0F0F0F, 0xF0F0F0, 0x0F0F0F, 0x123456],
+        [0xFFFFFF, 0x000000, 0xFFFFFF, 0x000000, 0xFFFFFF],
+        [0x555555, 0x555555, 0x555555, 0x555555, 0x555555],
+        [0xAAAAAA, 0xAAAAAA, 0xAAAAAA, 0xAAAAAA, 0xAAAAAA],
+        [0x123456, 0x789ABC, 0xDEF012, 0x345678, 0x9ABCDE],
+    ]
+
+    random.seed(2025)
+    rand_cases = [[random.randint(0, mask) for _ in range(5)] for _ in range(22)]
+    all_cases = fixed_cases + rand_cases
+
+    errors = 0
+    for pp in all_cases:
+        exp_out0, exp_out1 = _wallace5to2_model(pp, WIDTH)
+        dut.INPUT.value = _pack_input(pp, WIDTH)
+        await Timer(1, unit="ns")
+        act_out0 = int(dut.OUT0.value) & mask
+        act_out1 = int(dut.OUT1.value) & mask
+        if act_out0 != exp_out0 or act_out1 != exp_out1:
+            errors += 1
+            if errors <= 3:
+                dut._log.info(
+                    f"FAIL: pp={[f'{p:06x}' for p in pp]}"
+                )
+                dut._log.info(
+                    f"  Expected OUT0={exp_out0:06x} OUT1={exp_out1:06x}"
+                )
+                dut._log.info(
+                    f"  Got     OUT0={act_out0:06x} OUT1={act_out1:06x}"
+                )
+
+    assert errors == 0, (
+        f"Wallace5 topology mismatch for {errors}/30 cases. "
+        f"The required topology is a strict 3-level CSA32 cascade: "
+        f"Level0=CSA32(pp[0:2]), Level1=CSA32(s0,c0,pp[3]), Level2=CSA32(s1,c1,pp[4]). "
+        f"Different reduction orders or behavioral implementations produce different bit patterns."
+    )
+    dut._log.info("Wallace5 Test 2: Exact topology match (30 vectors) PASSED")
+
+
+def test_session3_wallace5to2_component():
+    """
+    Session 3: Wallace 5:2 Tree Tests (3 tests).
+    Imports ALL .v files from cmac/ and vlibs/ so file naming is irrelevant.
+    FAILS if module NV_NVDLA_CMAC_CORE_wallace_5to2 is not defined in any source file.
+    """
+    sim = os.getenv("SIM", "icarus")
+    proj_path = Path(__file__).resolve().parent.parent
+
+    cmac_dir = proj_path / "sources/vmod/nvdla/cmac"
+    vlibs_dir = proj_path / "sources/vmod/vlibs"
+
+    all_sources = [proj_path / "sources/verif/sim_vivado/timescale.v"]
+    all_sources += sorted(cmac_dir.glob("*.v"))
+    all_sources += sorted(vlibs_dir.glob("*.v"))
+
+    print(f"\n{'='*70}")
+    print(f"SESSION 3: Wallace 5:2 Tree Tests")
+    print(f"Source files: {len(all_sources)} total")
+    print(f"{'='*70}")
+
+    runner = get_runner(sim)
+    runner.build(
+        sources=all_sources,
+        hdl_toplevel="NV_NVDLA_CMAC_CORE_wallace_5to2",
+        always=True,
+        parameters={"num_inputs": "5", "input_width": "24"}
+    )
+    runner.test(
+        hdl_toplevel="NV_NVDLA_CMAC_CORE_wallace_5to2",
+        test_module="test_NV_NVDLA_CMAC_CORE_MAC_mul_hidden",
+        testcase="test_w5_.*"
+    )
+
+
+def test_session4_multiplier_integration():
+    """
+    Session 4: Multiplier Integration Tests (21 tests).
     Tests full NV_NVDLA_CMAC_CORE_MAC_mul module.
     Imports ALL .v files from cmac/ and vlibs/ so any agent-created files are included.
     """
@@ -1827,7 +2044,7 @@ def test_session3_multiplier_integration():
     all_sources += sorted(vlibs_dir.glob("*.v"))
     
     print(f"\n{'='*70}")
-    print("SESSION 3: Multiplier Integration Tests")
+    print("SESSION 4: Multiplier Integration Tests")
     print(f"Source files: {len(all_sources)} total")
     print(f"{'='*70}")
     
