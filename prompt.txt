@@ -1,19 +1,15 @@
 OPTIMIZE THE CMAC MULTIPLIER WITH A STRUCTURAL WALLACE TREE
 
-What is a Wallace Tree
-
-A Wallace tree is a parallel reduction structure that compresses multiple operands down to two values (sum and carry) using layers of carry-save adders. Unlike sequential addition where carries propagate through each bit position, Wallace trees use parallel stages where each layer independently reduces the number of operands. Each reduction stage processes groups of inputs using carry-save adders, outputting fewer partial results. This process repeats across multiple layers until only two values remain, which can then be added with a final carry-propagate adder.
-
-The key advantage is depth: reduction happens in logarithmic stages rather than linear time, since all bit positions are processed simultaneously without waiting for carry propagation.
+A Wallace tree reduces multiple operands to two values (sum and carry) using carry-save adders organized in parallel reduction stages.
 
 Your Task
 
-Replace the NV_DW02_tree instances in the CMAC multiplier with structural Wallace tree implementations.
+The CMAC multiplier's carry-save reduction stage uses a generic compressor component. Study the multiplier source to understand the reduction topology, then replace that component with a hand-crafted Wallace tree implementation using the modules below.
 
 Requirements
 
 Your implementation must:
-  - Produce functionally equivalent outputs to the original NV_DW02_tree
+  - Produce correct arithmetic results across all operating modes (INT8 dual-lane, INT16, FP16)
   - Use structural instantiations (no behavioral loops)
   - Maintain the same multiplier interface (no new external ports)
 
