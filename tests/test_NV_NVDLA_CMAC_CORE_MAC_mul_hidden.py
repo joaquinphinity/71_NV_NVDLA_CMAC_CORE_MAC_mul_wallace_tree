@@ -1643,9 +1643,64 @@ async def test_csa42_carry_independence(dut):
     assert cout_0 == cout_1, f"cout should be independent of cin: {cout_0:x} != {cout_1:x}"
     dut._log.info("CSA42 Test 2: Carry independence PASSED")
 
+@cocotb.test(timeout_time=2000, timeout_unit="ms")
+async def test_csa42_cout_independence_strict(dut):
+    """CSA42 Test 3: cout must equal majority(in0,in1,in2) and be independent of in3 and cin.
+
+    A correct 2-stage CSA42 computes:
+      Stage 1: (s0, cout) = csa32(in0, in1, in2)
+               where cout = majority(in0, in1, in2) = (in0&in1)|(in0&in2)|(in1&in2)
+      Stage 2: (sum, carry) = csa32(s0, in3, cin)
+
+    So cout only depends on in0, in1, in2. Any implementation that routes in3
+    or cin into the cout computation (e.g. a single-stage 4:2 compressor or a
+    merged carry network) will produce cout != majority(in0,in1,in2) for the
+    test vectors below.
+    """
+    random.seed(42)
+    width = 24
+    mask = (1 << width) - 1
+    errors = 0
+
+    for _ in range(100):
+        in0 = random.randint(0, mask)
+        in1 = random.randint(0, mask)
+        in2 = random.randint(0, mask)
+        # cout = majority(in0,in1,in2) << 1  (left-shifted, same convention as carry)
+        fa1_carry = (in0 & in1) | (in0 & in2) | (in1 & in2)
+        expected_cout = ((fa1_carry << 1) & mask)
+
+        for _ in range(5):
+            in3 = random.randint(0, mask)
+            cin = random.randint(0, mask)
+            dut.in0.value = in0
+            dut.in1.value = in1
+            dut.in2.value = in2
+            dut.in3.value = in3
+            dut.cin.value = cin
+            await Timer(1, unit="ns")
+
+            actual_cout = int(dut.cout.value) & mask
+            if actual_cout != expected_cout:
+                errors += 1
+                if errors <= 3:
+                    dut._log.info(
+                        f"FAIL: in0={in0:06x} in1={in1:06x} in2={in2:06x} "
+                        f"in3={in3:06x} cin={cin:06x} "
+                        f"expected_cout={expected_cout:06x} got={actual_cout:06x}"
+                    )
+
+    assert errors == 0, (
+        f"cout must equal (majority(in0,in1,in2)<<1) for all in3/cin combinations. "
+        f"{errors} failures. A correct 2-stage CSA42 computes cout = FA1_carry<<1 "
+        f"where FA1 only sees in0/in1/in2 — in3 and cin must not affect cout."
+    )
+    dut._log.info("CSA42 Test 3 (strict): cout independence from in3 and cin PASSED")
+
+
 @cocotb.test(timeout_time=1000, timeout_unit="ms")
 async def test_csa42_random(dut):
-    """CSA42 Test 3: Random test vectors."""
+    """CSA42 Test 4: Random test vectors."""
     random.seed(99)
     errors = 0
     width = 24
