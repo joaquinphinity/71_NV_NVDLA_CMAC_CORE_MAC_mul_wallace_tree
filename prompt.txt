@@ -10,7 +10,6 @@ Requirements
 
 Your implementation must:
   - Produce correct arithmetic results across all operating modes (INT8 dual-lane, INT16, FP16)
-  - Use structural instantiations (no behavioral loops)
   - Maintain the same multiplier interface (no new external ports)
 
 Required Modules
