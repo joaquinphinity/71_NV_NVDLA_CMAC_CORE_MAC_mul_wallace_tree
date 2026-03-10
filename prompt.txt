@@ -26,15 +26,6 @@ Implement these modules with the exact interfaces specified below. Place all you
     Inputs:  in0[WIDTH-1:0], in1[WIDTH-1:0], in2[WIDTH-1:0], in3[WIDTH-1:0], cin[WIDTH-1:0]
     Outputs: sum[WIDTH-1:0], carry[WIDTH-1:0], cout[WIDTH-1:0]
 
-  Module: NV_NVDLA_CMAC_CORE_wallace_5to2
-    Parameters: num_inputs (default 5), input_width (default 24)
-    Input:   INPUT[num_inputs*input_width-1:0]  (concatenated partial products, pp[i] at bits [i*input_width +: input_width])
-    Outputs: OUT0[input_width-1:0], OUT1[input_width-1:0]
-    Topology: Three-level CSA32 cascade in this exact order:
-      Level 0: CSA32(pp[0], pp[1], pp[2]) -> (s0, c0)
-      Level 1: CSA32(s0,    c0,    pp[3]) -> (s1, c1)
-      Level 2: CSA32(s1,    c1,    pp[4]) -> (OUT0, OUT1)
-
 These exact module names and port names are required for testing.
 
 The complete NVDLA source code is provided for context.
