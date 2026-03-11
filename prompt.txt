@@ -2,7 +2,8 @@ IMPLEMENT A STRUCTURAL WALLACE TREE FOR THE CMAC MULTIPLIER
 
 The CMAC multiplier's reduction stage uses a generic component that must be
 replaced with a structural Wallace tree. Study the source to understand the
-reduction topology and operating modes.
+reduction topology and operating modes. Replace the existing generic component
+instances in the multiplier source with your structural implementation.
 
 Required Modules
 
