@@ -1,15 +1,15 @@
 # Synthesis script for NV_NVDLA_CMAC_CORE_MAC_mul (task 71 - Wallace Tree)
-# DESIGNWARE_NOEXIST selects the NVDLA-provided NV_DW02_tree simulation model
-# instead of the DesignWare DW02_tree IP (which Yosys cannot resolve).
-# Note: if the agent's solution fully replaces DW02_tree with custom modules,
-# DESIGNWARE_NOEXIST is still needed for the ifdef guards that remain in mul.v.
+# DESIGNWARE_NOEXIST is needed for the ifdef guards in mul.v even when the agent
+# has fully replaced NV_DW02_tree with custom structural modules.
+# NV_DW02_tree.v is intentionally NOT read: agents must replace all NV_DW02_tree
+# instances with synthesizable structural RTL. Any lingering NV_DW02_tree
+# instantiation will cause 'hierarchy -check' to fail (module not found).
 verilog_defaults -define DESIGNWARE_NOEXIST
-read_verilog sources/vmod/nvdla/cmac/NV_NVDLA_CMAC_CORE_MAC_mul.v
-read_verilog sources/vmod/nvdla/cmac/NV_NVDLA_CMAC_CORE_csa32.v
-read_verilog sources/vmod/nvdla/cmac/NV_NVDLA_CMAC_CORE_csa42.v
-read_verilog sources/vmod/nvdla/cmac/NV_NVDLA_CMAC_CORE_wallace_4to2.v
-read_verilog sources/vmod/nvdla/cmac/NV_NVDLA_CMAC_CORE_wallace_5to2.v
-read_verilog sources/vmod/vlibs/NV_DW02_tree.v
+# Read all agent-created files from cmac/ — glob avoids hardcoded filenames
+# so any .v file the agent places in cmac/ is included automatically.
+foreach f [glob -nocomplain sources/vmod/nvdla/cmac/*.v] {
+    read_verilog $f
+}
 hierarchy -check -top NV_NVDLA_CMAC_CORE_MAC_mul
 proc; opt; memory; opt
 techmap; opt
